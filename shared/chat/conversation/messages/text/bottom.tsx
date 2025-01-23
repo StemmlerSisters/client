@@ -1,32 +1,28 @@
-import * as Container from '../../../../util/container'
+import * as C from '@/constants'
 import * as React from 'react'
-import {ConvoIDContext} from '../ids-context'
-import type * as Types from '../../../../constants/types/chat2'
+import type * as T from '@/constants/types'
 import type CoinFlipType from './coinflip'
 import type UnfurlListType from './unfurl/unfurl-list'
 import type UnfurlPromptListType from './unfurl/prompt-list/container'
-import shallowEqual from 'shallowequal'
 
 type Props = {
   hasUnfurlPrompts: boolean
   hasUnfurlList: boolean
   hasCoinFlip: boolean
-  toggleShowingPopup: () => void
 }
 
-export const useBottom = (ordinal: Types.Ordinal, toggleShowingPopup: () => void) => {
-  const conversationIDKey = React.useContext(ConvoIDContext)
-  const {hasUnfurlPrompts, hasCoinFlip, hasUnfurlList} = Container.useSelector(state => {
-    const message = state.chat2.messageMap.get(conversationIDKey)?.get(ordinal)
-    const hasCoinFlip = message?.type === 'text' && !!message.flipGameID
-    const hasUnfurlList = (message?.unfurls?.size ?? 0) > 0
+export const useBottom = (ordinal: T.Chat.Ordinal) => {
+  const {id, hasCoinFlip, hasUnfurlList} = C.useChatContext(
+    C.useShallow(s => {
+      const message = s.messageMap.get(ordinal)
+      const hasCoinFlip = message?.type === 'text' && !!message.flipGameID
+      const hasUnfurlList = (message?.unfurls?.size ?? 0) > 0
+      const id = message?.id
+      return {hasCoinFlip, hasUnfurlList, id}
+    })
+  )
 
-    const id = message?.id
-    const hasUnfurlPrompts = id
-      ? (state.chat2.unfurlPromptMap.get(conversationIDKey)?.get(id)?.size ?? 0) > 0
-      : false
-    return {hasCoinFlip, hasUnfurlList, hasUnfurlPrompts}
-  }, shallowEqual)
+  const hasUnfurlPrompts = C.useChatContext(s => !!id && !!s.unfurlPrompt.get(id)?.size)
 
   return React.useMemo(
     () => (
@@ -34,10 +30,9 @@ export const useBottom = (ordinal: Types.Ordinal, toggleShowingPopup: () => void
         hasCoinFlip={hasCoinFlip}
         hasUnfurlList={hasUnfurlList}
         hasUnfurlPrompts={hasUnfurlPrompts}
-        toggleShowingPopup={toggleShowingPopup}
       />
     ),
-    [hasCoinFlip, hasUnfurlList, hasUnfurlPrompts, toggleShowingPopup]
+    [hasCoinFlip, hasUnfurlList, hasUnfurlPrompts]
   )
 }
 
@@ -46,15 +41,16 @@ const WrapperTextBottom = function WrapperTextBottom(p: Props) {
 
   const unfurlPrompts = (() => {
     if (hasUnfurlPrompts) {
-      const UnfurlPromptList = require('./unfurl/prompt-list/container')
-        .default as typeof UnfurlPromptListType
+      const {default: UnfurlPromptList} = require('./unfurl/prompt-list/container') as {
+        default: typeof UnfurlPromptListType
+      }
       return <UnfurlPromptList />
     }
     return null
   })()
 
   const unfurlList = (() => {
-    const UnfurlList = require('./unfurl/unfurl-list').default as typeof UnfurlListType
+    const {default: UnfurlList} = require('./unfurl/unfurl-list') as {default: typeof UnfurlListType}
     if (hasUnfurlList) {
       return <UnfurlList key="UnfurlList" />
     }
@@ -63,7 +59,7 @@ const WrapperTextBottom = function WrapperTextBottom(p: Props) {
 
   const coinflip = (() => {
     if (hasCoinFlip) {
-      const CoinFlip = require('./coinflip').default as typeof CoinFlipType
+      const {default: CoinFlip} = require('./coinflip') as {default: typeof CoinFlipType}
       return <CoinFlip key="CoinFlip" />
     }
     return null

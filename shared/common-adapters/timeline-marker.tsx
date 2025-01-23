@@ -1,5 +1,5 @@
 import Box from './box'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 import {timeline_grey} from './timeline-marker.meta'
 
 const Kb = {
@@ -10,7 +10,7 @@ export type Props = {
   idx: number
   max: number
   type?: 'open' | 'closed'
-  style?: any
+  style?: Styles.StylesCrossPlatform
 }
 
 const TimelineMarker = ({idx, max, type, style}: Props) => (

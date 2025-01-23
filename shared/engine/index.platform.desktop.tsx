@@ -1,20 +1,19 @@
-import logger from '../logger'
+import logger from '@/logger'
 import {TransportShared, sharedCreateClient, rpcLog} from './transport-shared'
-import {socketPath} from '../constants/platform.desktop'
-import {printRPCBytes} from '../local-debug'
-import type {SendArg, createClientType, incomingRPCCallbackType, connectDisconnectCB} from './index.platform'
-import KB2 from '../util/electron.desktop'
-import {Buffer} from 'buffer/'
+import {socketPath} from '@/constants/platform.desktop'
+import {printRPCBytes} from '@/local-debug'
+import type {CreateClientType, IncomingRPCCallbackType, ConnectDisconnectCB} from './index.platform'
+import KB2 from '@/util/electron.desktop'
 
-const {engineSend, mainWindowDispatch, ipcRendererOn} = KB2.functions
+const {engineSend, ipcRendererOn, mainWindowDispatchEngineIncoming} = KB2.functions
 const {isRenderer} = KB2.constants
 
 // used by node
 class NativeTransport extends TransportShared {
   constructor(
-    incomingRPCCallback: incomingRPCCallbackType,
-    connectCallback?: connectDisconnectCB,
-    disconnectCallback?: connectDisconnectCB
+    incomingRPCCallback: IncomingRPCCallbackType,
+    connectCallback?: ConnectDisconnectCB,
+    disconnectCallback?: ConnectDisconnectCB
   ) {
     super({path: socketPath}, connectCallback, disconnectCallback, incomingRPCCallback)
     this.needsConnect = true
@@ -24,32 +23,28 @@ class NativeTransport extends TransportShared {
     super._connect_critical_section(cb)
   }
 
-  // Override Transport._raw_write -- see transport.iced in
-  // framed-msgpack-rpc.
+  // Override Transport._raw_write -- see transport.iced in framed-msgpack-rpc.
   _raw_write(msg: string, encoding: 'binary') {
     if (printRPCBytes) {
-      const b = Buffer.from(msg, encoding)
-      logger.debug('[RPC] Writing', b.length, 'bytes:', b.toString('hex'))
+      logger.debug('[RPC] Writing', msg.length)
     }
     super._raw_write(msg, encoding)
   }
 
-  // Override Packetizer.packetize_data -- see packetizer.iced in
-  // framed-msgpack-rpc.
-  packetize_data(m: Buffer) {
+  // Override Packetizer.packetize_data -- see packetizer.iced in framed-msgpack-rpc.
+  packetize_data(m: Uint8Array) {
     if (printRPCBytes) {
-      logger.debug('[RPC] Read', m.length, 'bytes:', m.toString('hex'))
+      logger.debug('[RPC] Read', m.length)
     }
-    // @ts-ignore this isn't a typical redux action
-    mainWindowDispatch({payload: m}, 'engineIncoming')
+    mainWindowDispatchEngineIncoming(m)
   }
 }
 
 class ProxyNativeTransport extends TransportShared {
   constructor(
-    incomingRPCCallback: incomingRPCCallbackType,
-    connectCallback?: connectDisconnectCB,
-    disconnectCallback?: connectDisconnectCB
+    incomingRPCCallback: IncomingRPCCallbackType,
+    connectCallback?: ConnectDisconnectCB,
+    disconnectCallback?: ConnectDisconnectCB
   ) {
     super({}, connectCallback, disconnectCallback, incomingRPCCallback)
 
@@ -58,7 +53,7 @@ class ProxyNativeTransport extends TransportShared {
   }
 
   // We're always connected, so call the callback
-  connect(cb: (err?: any) => void) {
+  connect(cb: (err?: unknown) => void) {
     cb()
   }
   is_connected() {
@@ -72,16 +67,17 @@ class ProxyNativeTransport extends TransportShared {
     return 1
   }
 
-  send(msg: SendArg) {
-    engineSend?.(msg)
+  send(msg: unknown) {
+    // send over bridge to node to really send
+    engineSend?.(msg as Uint8Array)
     return true
   }
 }
 
 function createClient(
-  incomingRPCCallback: incomingRPCCallbackType,
-  connectCallback: connectDisconnectCB,
-  disconnectCallback: connectDisconnectCB
+  incomingRPCCallback: IncomingRPCCallbackType,
+  connectCallback: ConnectDisconnectCB,
+  disconnectCallback: ConnectDisconnectCB
 ) {
   if (!isRenderer) {
     return sharedCreateClient(new NativeTransport(incomingRPCCallback, connectCallback, disconnectCallback))
@@ -91,9 +87,9 @@ function createClient(
     )
 
     // plumb back data from the node side
-    ipcRendererOn?.('engineIncoming', (_e, action) => {
+    ipcRendererOn?.('engineIncoming', (_e: unknown, data: unknown) => {
       try {
-        client.transport.packetize_data(new Buffer(action.payload))
+        client.transport.packetize_data(data as Uint8Array)
       } catch (e) {
         logger.error('>>>> rpcOnJs JS thrown!', e)
       }
@@ -103,7 +99,7 @@ function createClient(
   }
 }
 
-function resetClient(client: createClientType) {
+function resetClient(client: CreateClientType) {
   client.transport.reset()
 }
 

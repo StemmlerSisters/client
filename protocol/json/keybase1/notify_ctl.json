@@ -37,6 +37,10 @@
         },
         {
           "type": "boolean",
+          "name": "notifysimplefs"
+        },
+        {
+          "type": "boolean",
           "name": "tracking"
         },
         {
@@ -138,6 +142,10 @@
         {
           "type": "boolean",
           "name": "allowChatNotifySkips"
+        },
+        {
+          "type": "boolean",
+          "name": "chatarchive"
         }
       ]
     }

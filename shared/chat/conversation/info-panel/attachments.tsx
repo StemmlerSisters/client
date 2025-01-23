@@ -1,17 +1,19 @@
-import * as Chat2Gen from '../../../actions/chat2-gen'
-import * as Container from '../../../util/container'
+import * as C from '@/constants'
+import * as Kb from '@/common-adapters'
+import type {StylesTextCrossPlatform} from '@/common-adapters/text'
+import * as T from '@/constants/types'
 import * as React from 'react'
-import * as FsGen from '../../../actions/fs-gen'
-import type * as Types from '../../../constants/types/chat2'
-import * as Constants from '../../../constants/chat2'
-import * as RPCChatTypes from '../../../constants/types/rpc-chat-gen'
-import * as Kb from '../../../common-adapters'
-import * as Styles from '../../../styles'
-import {formatAudioRecordDuration, formatTimeForMessages} from '../../../util/timestamp'
-import {useMessagePopup} from '../messages/message-popup'
+import * as Styles from '@/styles'
 import chunk from 'lodash/chunk'
+import type {Section} from '@/common-adapters/section-list'
+import {formatAudioRecordDuration, formatTimeForMessages} from '@/util/timestamp'
 import {infoPanelWidth} from './common'
-import type {Section} from '../../../common-adapters/section-list'
+import {useMessagePopup} from '../messages/message-popup'
+
+type Props = {
+  renderTabs: () => React.ReactElement | null
+  commonSections: Array<Section<unknown, {type: 'header-section'}>>
+}
 
 const monthNames = [
   'January',
@@ -35,7 +37,7 @@ enum ThumbTyp {
 }
 
 type Thumb = {
-  key: React.Key
+  key: string
   ctime: number
   height: number
   typ: ThumbTyp
@@ -50,11 +52,12 @@ type Doc = {
   ctime: number
   downloading: boolean
   fileName: string
-  message?: Types.Message
+  message?: T.Chat.Message
   name: string
   progress: number
   onDownload?: () => void
   onShowInFinder?: () => void
+  onClick: () => void
 }
 
 type Link = {
@@ -63,10 +66,48 @@ type Link = {
   snippet: string
   title?: string
   url?: string
+  key: string
+  id: T.Chat.MessageID
 }
+
+type ThumbData = {
+  images: {
+    debug: {
+      height: number
+      maxMediaThumbSize: number
+      width: number
+    }
+    sizing: {
+      dims: {
+        height: number
+        width: number
+      }
+      margins: {
+        marginBottom: number
+        marginLeft: number
+        marginRight: number
+        marginTop: number
+      }
+    }
+    thumb: Thumb
+  }[]
+  key: number
+}
+
+type SectionTypes =
+  | {type: 'doc'}
+  | {type: 'link'}
+  | {type: 'thumb'}
+  | {type: 'avselector'}
+  | {type: 'no-attachments'}
+  | {type: 'load-more'}
+  | {type: 'header-section'}
+
 type InfoPanelSection = Section<
-  any,
-  {title?: string; renderSectionHeader?: (info: {section: Section<any, any>}) => React.ReactNode}
+  unknown,
+  SectionTypes & {
+    renderSectionHeader?: (props: {section: SectionTypes}) => React.ReactElement | null
+  }
 >
 
 function getDateInfo<I extends {ctime: number}>(thumb: I) {
@@ -77,18 +118,18 @@ function getDateInfo<I extends {ctime: number}>(thumb: I) {
   }
 }
 
-function formMonths<I extends {ctime: number; key: React.Key}>(
+function formMonths<I extends {ctime: number; key: string}>(
   items: Array<I>
 ): Array<{
-  key: React.Key
+  key: string
   data: Array<I>
-  month: string
+  month?: string
   year: number
 }> {
   if (items.length === 0) {
     return []
   }
-  const dateInfo = getDateInfo(items[0])
+  const dateInfo = getDateInfo(items[0]!)
   let curMonth = {
     ...dateInfo,
     data: [] as Array<I>,
@@ -136,7 +177,6 @@ type MediaThumbProps = {
 
 const MediaThumb = (props: MediaThumbProps) => {
   const {sizing, thumb} = props
-  const [loading, setLoading] = React.useState(thumb.typ !== ThumbTyp.AUDIO)
   return (
     <Kb.Box2 direction="vertical" style={styles.thumbContainer}>
       <Kb.ClickableBox onClick={thumb.onClick} style={{...sizing.margins}}>
@@ -155,7 +195,7 @@ const MediaThumb = (props: MediaThumbProps) => {
             )}
           </Kb.Box2>
         ) : (
-          <Kb.Image src={thumb.previewURL} style={{...sizing.dims}} onLoad={() => setLoading(false)} />
+          <Kb.Image2 src={thumb.previewURL} style={{...sizing.dims}} />
         )}
       </Kb.ClickableBox>
       {thumb.typ === ThumbTyp.VIDEO && (
@@ -163,7 +203,6 @@ const MediaThumb = (props: MediaThumbProps) => {
           <Kb.Icon type="icon-film-64" style={styles.filmIcon} />
         </Kb.Box2>
       )}
-      {loading && <Kb.ProgressIndicator style={styles.loading} />}
     </Kb.Box2>
   )
 }
@@ -172,14 +211,16 @@ type DocViewRowProps = {item: Doc}
 
 const DocViewRow = (props: DocViewRowProps) => {
   const {item} = props
-  const {toggleShowingPopup, showingPopup, popup} = useMessagePopup({
-    conversationIDKey: item.message?.conversationIDKey ?? '',
-    ordinal: item.message?.id ?? 0,
-    shouldShow: () => !!item.message,
+  const shouldShow = React.useCallback(() => {
+    return !!item.message
+  }, [item])
+  const {showPopup, popup} = useMessagePopup({
+    ordinal: item.message?.ordinal ?? T.Chat.numberToOrdinal(0),
+    shouldShow,
   })
   return (
     <Kb.Box2 direction="vertical" fullWidth={true}>
-      <Kb.ClickableBox onClick={item.onDownload} onLongPress={toggleShowingPopup}>
+      <Kb.ClickableBox onClick={item.onClick} onLongPress={showPopup}>
         <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.docRowContainer} gap="xtiny">
           <Kb.Icon type="icon-file-32" style={styles.docIcon} />
           <Kb.Box2 direction="vertical" fullWidth={true} style={styles.docRowTitle}>
@@ -204,14 +245,14 @@ const DocViewRow = (props: DocViewRowProps) => {
           </Kb.Text>
         </Kb.Box2>
       )}
-      {Styles.isMobile && showingPopup && item.message && popup}
+      {Styles.isMobile && item.message && popup}
     </Kb.Box2>
   )
 }
 
 type SelectorProps = {
-  selectedView: RPCChatTypes.GalleryItemTyp
-  onSelectView: (typ: RPCChatTypes.GalleryItemTyp) => void
+  selectedView: T.RPCChat.GalleryItemTyp
+  onSelectView: (typ: T.RPCChat.GalleryItemTyp) => void
 }
 
 const getBkgColor = (selected: boolean) =>
@@ -222,38 +263,38 @@ const getColor = (selected: boolean) =>
 const AttachmentTypeSelector = (props: SelectorProps) => (
   <Kb.Box2 alignSelf="center" direction="horizontal" style={styles.selectorContainer} fullWidth={true}>
     <Kb.ClickableBox
-      onClick={() => props.onSelectView(RPCChatTypes.GalleryItemTyp.media)}
+      onClick={() => props.onSelectView(T.RPCChat.GalleryItemTyp.media)}
       style={Styles.collapseStyles([
         styles.selectorItemContainer,
         styles.selectorMediaContainer,
-        getBkgColor(props.selectedView === RPCChatTypes.GalleryItemTyp.media),
+        getBkgColor(props.selectedView === T.RPCChat.GalleryItemTyp.media),
       ])}
     >
-      <Kb.Text type="BodySemibold" style={getColor(props.selectedView === RPCChatTypes.GalleryItemTyp.media)}>
+      <Kb.Text type="BodySemibold" style={getColor(props.selectedView === T.RPCChat.GalleryItemTyp.media)}>
         Media
       </Kb.Text>
     </Kb.ClickableBox>
     <Kb.ClickableBox
-      onClick={() => props.onSelectView(RPCChatTypes.GalleryItemTyp.doc)}
+      onClick={() => props.onSelectView(T.RPCChat.GalleryItemTyp.doc)}
       style={Styles.collapseStyles([
         styles.selectorDocContainer,
         styles.selectorItemContainer,
-        getBkgColor(props.selectedView === RPCChatTypes.GalleryItemTyp.doc),
+        getBkgColor(props.selectedView === T.RPCChat.GalleryItemTyp.doc),
       ])}
     >
-      <Kb.Text type="BodySemibold" style={getColor(props.selectedView === RPCChatTypes.GalleryItemTyp.doc)}>
+      <Kb.Text type="BodySemibold" style={getColor(props.selectedView === T.RPCChat.GalleryItemTyp.doc)}>
         Docs
       </Kb.Text>
     </Kb.ClickableBox>
     <Kb.ClickableBox
-      onClick={() => props.onSelectView(RPCChatTypes.GalleryItemTyp.link)}
+      onClick={() => props.onSelectView(T.RPCChat.GalleryItemTyp.link)}
       style={Styles.collapseStyles([
         styles.selectorItemContainer,
         styles.selectorLinkContainer,
-        getBkgColor(props.selectedView === RPCChatTypes.GalleryItemTyp.link),
+        getBkgColor(props.selectedView === T.RPCChat.GalleryItemTyp.link),
       ])}
     >
-      <Kb.Text type="BodySemibold" style={getColor(props.selectedView === RPCChatTypes.GalleryItemTyp.link)}>
+      <Kb.Text type="BodySemibold" style={getColor(props.selectedView === T.RPCChat.GalleryItemTyp.link)}>
         Links
       </Kb.Text>
     </Kb.ClickableBox>
@@ -372,113 +413,117 @@ const styles = Styles.styleSheetCreate(
         overflow: 'hidden',
         position: 'relative',
       },
-    } as const)
+    }) as const
 )
 
 const linkStyleOverride = {
-  link: Styles.collapseStyles([styles.linkStyle, {color: Styles.globalColors.blueDark}]),
+  link: Styles.collapseStyles([
+    styles.linkStyle,
+    {color: Styles.globalColors.blueDark},
+  ]) as StylesTextCrossPlatform,
 }
 
-type Props = {
-  conversationIDKey: Types.ConversationIDKey
-  renderTabs: () => React.ReactNode
-  commonSections: Array<Section<{key: string}, {title?: string}>>
-}
-
-const getFromMsgID = (info: Types.AttachmentViewInfo): Types.MessageID | null => {
+const getFromMsgID = (info: T.Chat.AttachmentViewInfo): T.Chat.MessageID | undefined => {
   if (info.last || info.status !== 'success') {
-    return null
+    return undefined
   }
-  const lastMessage = info.messages.length > 0 ? info.messages[info.messages.length - 1] : null
-  return lastMessage ? lastMessage.id : null
+  const lastMessage = info.messages.length > 0 ? info.messages.at(-1) : undefined
+  return lastMessage?.id
 }
-
-const noAttachmentView = Constants.makeAttachmentViewInfo()
 
 export const useAttachmentSections = (
   p: Props,
   loadImmediately: boolean,
   useFlexWrap: boolean
-): Array<Section<any, {title?: string}>> => {
-  const {conversationIDKey} = p
-  const dispatch = Container.useDispatch()
-  const [selectedAttachmentView, onSelectAttachmentView] = React.useState<RPCChatTypes.GalleryItemTyp>(
-    RPCChatTypes.GalleryItemTyp.media
+): {sections: Array<InfoPanelSection>} => {
+  const conversationIDKey = C.useChatContext(s => s.id)
+  const [selectedAttachmentView, onSelectAttachmentView] = React.useState<T.RPCChat.GalleryItemTyp>(
+    T.RPCChat.GalleryItemTyp.media
+  )
+  const cidChanged = C.Chat.useCIDChanged(conversationIDKey)
+  const [lastSAV, setLastSAV] = React.useState(selectedAttachmentView)
+  const loadAttachmentView = C.useChatContext(s => s.dispatch.loadAttachmentView)
+  const loadMessagesCentered = C.useChatContext(s => s.dispatch.loadMessagesCentered)
+  const clearModals = C.useRouterState(s => s.dispatch.clearModals)
+
+  const jumpToAttachment = React.useCallback(
+    (messageID: T.Chat.MessageID) => {
+      if (C.isMobile) {
+        clearModals()
+      }
+      loadMessagesCentered(messageID, 'always')
+    },
+    [loadMessagesCentered, clearModals]
   )
 
-  React.useEffect(() => {
+  C.useOnMountOnce(() => {
+    setTimeout(() => {
+      loadAttachmentView(selectedAttachmentView)
+    }, 1)
+  })
+  if (cidChanged || lastSAV !== selectedAttachmentView) {
+    setLastSAV(selectedAttachmentView)
     if (loadImmediately) {
-      dispatch(Chat2Gen.createLoadAttachmentView({conversationIDKey, viewType: selectedAttachmentView}))
+      setTimeout(() => {
+        loadAttachmentView(selectedAttachmentView)
+      }, 1)
     }
-  }, [loadImmediately, selectedAttachmentView, conversationIDKey, dispatch])
+  }
 
-  const attachmentView = Container.useSelector(state => state.chat2.attachmentViewMap.get(conversationIDKey))
-  const attachmentInfo = attachmentView?.get(selectedAttachmentView) || noAttachmentView
-  const fromMsgID = getFromMsgID(attachmentInfo)
+  const attachmentView = C.useChatContext(s => s.attachmentViewMap)
+  const attachmentInfo = attachmentView.get(selectedAttachmentView)
+  const fromMsgID = attachmentInfo ? getFromMsgID(attachmentInfo) : undefined
 
-  const onLoadMore = fromMsgID
-    ? () =>
-        dispatch(
-          Chat2Gen.createLoadAttachmentView({
-            conversationIDKey,
-            fromMsgID,
-            viewType: selectedAttachmentView,
-          })
-        )
-    : undefined
+  const onLoadMore = fromMsgID ? () => loadAttachmentView(selectedAttachmentView, fromMsgID) : undefined
 
-  const onAttachmentViewChange = (viewType: RPCChatTypes.GalleryItemTyp) => {
+  const onAttachmentViewChange = (viewType: T.RPCChat.GalleryItemTyp) => {
     onSelectAttachmentView(viewType)
   }
 
   const loadAttachments = () => {
-    dispatch(Chat2Gen.createLoadAttachmentView({conversationIDKey, viewType: selectedAttachmentView}))
+    loadAttachmentView(selectedAttachmentView)
   }
 
-  const onMediaClick = (message: Types.MessageAttachment) =>
-    dispatch(
-      Chat2Gen.createAttachmentPreviewSelect({
-        conversationIDKey: message.conversationIDKey,
-        ordinal: message.id,
-      })
-    )
+  const attachmentPreviewSelect = C.useChatContext(s => s.dispatch.attachmentPreviewSelect)
+  const onMediaClick = (message: T.Chat.MessageAttachment) => attachmentPreviewSelect(message.ordinal)
 
-  const onDocDownload = (message: Types.MessageAttachment) => {
+  const attachmentDownload = C.useChatContext(s => s.dispatch.attachmentDownload)
+  const messageAttachmentNativeShare = C.useChatContext(s => s.dispatch.messageAttachmentNativeShare)
+
+  const onDocDownload = (message: T.Chat.MessageAttachment) => {
     if (Styles.isMobile) {
-      dispatch(Chat2Gen.createMessageAttachmentNativeShare({message}))
-    } else {
-      if (!message.downloadPath) {
-        dispatch(
-          Chat2Gen.createAttachmentDownload({
-            conversationIDKey: message.conversationIDKey,
-            ordinal: message.id,
-          })
-        )
-      }
+      messageAttachmentNativeShare(message.ordinal)
+    } else if (!message.downloadPath) {
+      attachmentDownload(message.ordinal)
     }
   }
 
-  const onShowInFinder = (message: Types.MessageAttachment) =>
-    message.downloadPath &&
-    dispatch(FsGen.createOpenLocalPathInSystemFileManager({localPath: message.downloadPath}))
+  const openLocalPathInSystemFileManagerDesktop = C.useFSState(
+    s => s.dispatch.dynamic.openLocalPathInSystemFileManagerDesktop
+  )
+  const onShowInFinder = (message: T.Chat.MessageAttachment) =>
+    message.downloadPath && openLocalPathInSystemFileManagerDesktop?.(message.downloadPath)
+
+  const avSection: InfoPanelSection = {
+    data: [{key: 'avselector'}],
+    key: 'avselector',
+    renderItem: () => (
+      <AttachmentTypeSelector selectedView={selectedAttachmentView} onSelectView={onAttachmentViewChange} />
+    ),
+    renderSectionHeader: p.renderTabs,
+    type: 'avselector',
+  } as const
 
   const commonSections: Array<InfoPanelSection> = [
-    ...p.commonSections,
-    {
-      data: [{key: 'avselector'}],
-      key: 'avselector',
-      renderItem: () => (
-        <AttachmentTypeSelector selectedView={selectedAttachmentView} onSelectView={onAttachmentViewChange} />
-      ),
-      renderSectionHeader: p.renderTabs,
-    },
+    ...(p.commonSections as Array<InfoPanelSection>),
+    avSection,
   ]
 
-  const loadMoreSection = {
+  const loadMoreSection: InfoPanelSection = {
     data: [{key: 'load more'}],
     key: 'load-more',
     renderItem: () => {
-      const status = attachmentInfo.status
+      const status = attachmentInfo?.status
       if (onLoadMore && status !== 'loading') {
         return (
           <Kb.Button
@@ -504,46 +549,47 @@ export const useAttachmentSections = (
       }
       return null
     },
-  }
+    type: 'load-more',
+  } as const
 
   let sections: Array<InfoPanelSection>
-  if (attachmentInfo.messages.length === 0 && attachmentInfo.status !== 'loading') {
-    sections = [
-      {
-        data: [{key: 'no-attachments'}],
-        key: 'no-attachments',
-        renderItem: () => (
-          <Kb.Box2 centerChildren={true} direction="horizontal" fullWidth={true}>
-            <Kb.Text type="BodySmall">No attachments</Kb.Text>
-          </Kb.Box2>
-        ),
-      },
-    ]
-    sections = [...commonSections, ...sections, loadMoreSection]
+  if (!attachmentInfo?.messages.length && attachmentInfo?.status !== 'loading') {
+    const noAttachmentsSection: InfoPanelSection = {
+      data: [{key: 'no-attachments'}],
+      key: 'no-attachments',
+      renderItem: () => (
+        <Kb.Box2 centerChildren={true} direction="horizontal" fullWidth={true}>
+          <Kb.Text type="BodySmall">No attachments</Kb.Text>
+        </Kb.Box2>
+      ),
+      type: 'no-attachments',
+    } as const
+    sections = [...commonSections, noAttachmentsSection, loadMoreSection]
   } else {
     switch (selectedAttachmentView) {
-      case RPCChatTypes.GalleryItemTyp.media:
+      case T.RPCChat.GalleryItemTyp.media:
         {
           const rowSize = 4 // count of images in each row
           const maxMediaThumbSize = infoPanelWidth() / rowSize
           const s = formMonths(
-            (attachmentInfo.messages as Array<Types.MessageAttachment>).map(
+            (attachmentInfo.messages as Array<T.Chat.MessageAttachment>).map(
               m =>
                 ({
                   audioDuration: m.audioDuration,
                   ctime: m.timestamp,
                   height: m.previewHeight,
+                  id: m.id,
                   key: `media-${m.ordinal}-${m.timestamp}-${m.previewURL}`,
                   onClick: () => onMediaClick(m),
                   previewURL: m.previewURL,
                   typ:
-                    m.audioAmps.length > 0
+                    (m.audioAmps?.length ?? 0) > 0
                       ? ThumbTyp.AUDIO
                       : m.videoDuration
-                      ? ThumbTyp.VIDEO
-                      : ThumbTyp.IMAGE,
+                        ? ThumbTyp.VIDEO
+                        : ThumbTyp.IMAGE,
                   width: m.previewWidth,
-                } as Thumb)
+                }) as Thumb
             )
           ).map(month => {
             const dataUnchunked = month.data.map(thumb => ({
@@ -552,7 +598,7 @@ export const useAttachmentSections = (
                 maxMediaThumbSize,
                 width: thumb.width,
               },
-              sizing: Constants.zoomImage(thumb.width, thumb.height, maxMediaThumbSize),
+              sizing: C.Chat.zoomImage(thumb.width, thumb.height, maxMediaThumbSize),
               thumb,
             }))
             const dataChunked = useFlexWrap ? [dataUnchunked] : chunk(dataUnchunked, rowSize)
@@ -560,7 +606,7 @@ export const useAttachmentSections = (
             return {
               data,
               key: month.key,
-              renderItem: ({item}: {item: Unpacked<typeof data>; index: number}) => (
+              renderItem: ({item}: {item: ThumbData; index: number}) => (
                 <Kb.Box2
                   direction="horizontal"
                   fullWidth={true}
@@ -573,14 +619,17 @@ export const useAttachmentSections = (
               ),
               renderSectionHeader: () => <Kb.SectionDivider label={`${month.month} ${month.year}`} />,
               title: `${month.month} ${month.year}`,
+              type: 'thumb',
             }
           })
-          sections = [...commonSections, ...s, loadMoreSection]
+          sections = [...commonSections, ...(s as Array<InfoPanelSection>), loadMoreSection]
         }
         break
-      case RPCChatTypes.GalleryItemTyp.doc:
+      case T.RPCChat.GalleryItemTyp.doc:
         {
-          const docs = (attachmentInfo.messages as Array<Types.MessageAttachment>).map(m => ({
+          const docs: Array<Doc & {ctime: number; key: string}> = (
+            attachmentInfo.messages as Array<T.Chat.MessageAttachment>
+          ).map(m => ({
             author: m.author,
             ctime: m.timestamp,
             downloading: m.transferState === 'downloading',
@@ -588,48 +637,48 @@ export const useAttachmentSections = (
             key: `doc-${m.ordinal}-${m.author}-${m.timestamp}-${m.fileName}`,
             message: m,
             name: m.title || m.fileName,
+            onClick: () => {
+              jumpToAttachment(m.id)
+            },
             onDownload: () => onDocDownload(m),
-            onShowInFinder: !Container.isMobile && m.downloadPath ? () => onShowInFinder(m) : undefined,
+            onShowInFinder: !C.isMobile && m.downloadPath ? () => onShowInFinder(m) : undefined,
             progress: m.transferProgress,
           }))
 
-          const s = formMonths(docs).map(month => ({
-            data: month.data,
-            key: month.key,
-            renderItem: ({item}: {item: Doc}) => <DocViewRow item={item} />,
-            renderSectionHeader: () => <Kb.SectionDivider label={`${month.month} ${month.year}`} />,
-          }))
-          sections = [...commonSections, ...s, loadMoreSection]
+          const s = formMonths(docs).map(
+            month =>
+              ({
+                data: month.data,
+                key: month.key,
+                renderItem: ({item}: {item: Doc}) => <DocViewRow item={item} />,
+                renderSectionHeader: () => <Kb.SectionDivider label={`${month.month} ${month.year}`} />,
+                type: 'doc',
+              }) as const
+          )
+          sections = [...commonSections, ...(s as Array<InfoPanelSection>), loadMoreSection]
         }
         break
-      case RPCChatTypes.GalleryItemTyp.link:
+      case T.RPCChat.GalleryItemTyp.link:
         {
-          const links = attachmentInfo.messages.reduce<
-            Array<{
-              author: string
-              ctime: number
-              key: React.Key
-              snippet: string
-              title?: string
-              url?: string
-            }>
-          >((l, m) => {
+          const links = attachmentInfo.messages.reduce<Array<Link>>((l, m) => {
             if (m.type !== 'text') {
               return l
             }
-            if (!m.unfurls.size) {
+            if (!m.unfurls?.size) {
               l.push({
                 author: m.author,
                 ctime: m.timestamp,
+                id: m.id,
                 key: `unfurl-empty-${m.ordinal}-${m.author}-${m.timestamp}`,
                 snippet: m.decoratedText?.stringValue() ?? '',
               })
             } else {
               ;[...m.unfurls.values()].forEach((u, i) => {
-                if (u.unfurl.unfurlType === RPCChatTypes.UnfurlType.generic) {
+                if (u.unfurl.unfurlType === T.RPCChat.UnfurlType.generic) {
                   l.push({
                     author: m.author,
                     ctime: m.timestamp,
+                    id: m.id,
                     key: `unfurl-${m.ordinal}-${i}-${m.author}-${m.timestamp}-${u.unfurl.generic.url}`,
                     snippet: m.decoratedText?.stringValue() ?? '',
                     title: u.unfurl.generic.title,
@@ -646,61 +695,71 @@ export const useAttachmentSections = (
             key: month.key,
             renderItem: ({item}: {item: Link}) => {
               return (
-                <Kb.Box2 direction="vertical" fullWidth={true} style={styles.linkContainer} gap="tiny">
-                  <Kb.Box2 direction="vertical" fullWidth={true} gap="xxtiny">
-                    <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny">
-                      <Kb.NameWithIcon
-                        avatarSize={32}
-                        avatarStyle={styles.avatar}
-                        colorFollowing={true}
-                        username={item.author}
-                        horizontal={true}
-                      />
-                      <Kb.Text type="BodyTiny" style={styles.linkTime}>
-                        {formatTimeForMessages(item.ctime)}
-                      </Kb.Text>
+                <Kb.ClickableBox2
+                  onClick={() => {
+                    jumpToAttachment(item.id)
+                  }}
+                >
+                  <Kb.Box2 direction="vertical" fullWidth={true} style={styles.linkContainer} gap="tiny">
+                    <Kb.Box2 direction="vertical" fullWidth={true} gap="xxtiny">
+                      <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny">
+                        <Kb.NameWithIcon
+                          avatarSize={32}
+                          avatarStyle={styles.avatar}
+                          colorFollowing={true}
+                          username={item.author}
+                          horizontal={true}
+                        />
+                        <Kb.Text type="BodyTiny" style={styles.linkTime}>
+                          {formatTimeForMessages(item.ctime)}
+                        </Kb.Text>
+                      </Kb.Box2>
+                      <Kb.Markdown
+                        serviceOnly={true}
+                        smallStandaloneEmoji={true}
+                        selectable={true}
+                        styleOverride={linkStyleOverride}
+                        style={styles.linkStyle}
+                      >
+                        {item.snippet}
+                      </Kb.Markdown>
                     </Kb.Box2>
-                    <Kb.Markdown
-                      serviceOnly={true}
-                      smallStandaloneEmoji={true}
-                      selectable={true}
-                      styleOverride={linkStyleOverride}
-                      style={styles.linkStyle}
-                    >
-                      {item.snippet}
-                    </Kb.Markdown>
+                    {!!item.title && (
+                      <Kb.Text
+                        type="BodySmallPrimaryLink"
+                        onClickURL={item.url}
+                        style={Styles.collapseStyles([
+                          styles.linkStyle,
+                          {color: Styles.globalColors.blueDark},
+                        ])}
+                      >
+                        {item.title}
+                      </Kb.Text>
+                    )}
+                    <Kb.Divider />
                   </Kb.Box2>
-                  {!!item.title && (
-                    <Kb.Text
-                      type="BodySmallPrimaryLink"
-                      onClickURL={item.url}
-                      style={Styles.collapseStyles([styles.linkStyle, {color: Styles.globalColors.blueDark}])}
-                    >
-                      {item.title}
-                    </Kb.Text>
-                  )}
-                  <Kb.Divider />
-                </Kb.Box2>
+                </Kb.ClickableBox2>
               )
             },
             renderSectionHeader: () => <Kb.SectionDivider label={`${month.month} ${month.year}`} />,
+            type: 'link',
           }))
-          sections = [...commonSections, ...s, loadMoreSection]
+          sections = [...commonSections, ...(s as Array<InfoPanelSection>), loadMoreSection]
         }
         break
     }
   }
 
-  return sections
+  return {sections}
 }
 
 const Attachments = (p: Props) => {
-  const sections = useAttachmentSections(p, true /* loadImmediately */, false /* flexWrap */)
+  const {sections} = useAttachmentSections(p, true /* loadImmediately */, false /* flexWrap */)
   return (
     <Kb.SectionList
       stickySectionHeadersEnabled={true}
       keyboardShouldPersistTaps="handled"
-      renderSectionHeader={({section}: any) => section?.renderSectionHeader?.({section}) ?? null}
+      renderSectionHeader={({section}) => section.renderSectionHeader?.({section}) || null}
       sections={sections}
     />
   )

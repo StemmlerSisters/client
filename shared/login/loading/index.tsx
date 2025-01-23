@@ -1,16 +1,15 @@
 import * as React from 'react'
-import * as Kb from '../../common-adapters'
-import * as Styles from '../../styles'
+import * as Kb from '@/common-adapters'
 
 type Props = {
   allowFeedback?: boolean
   failed: string
   status: string
-  onRetry: (() => void) | null
-  onFeedback: (() => void) | null
+  onRetry?: () => void
+  onFeedback?: () => void
 }
 
-const Feedback = ({onFeedback}) =>
+const Feedback = ({onFeedback}: {onFeedback?: () => void}) =>
   onFeedback ? (
     <Kb.ButtonBar>
       <Kb.Button type="Dim" label="Send us feedback" onClick={onFeedback} />
@@ -28,12 +27,14 @@ const Feedback = ({onFeedback}) =>
 const Splash = (props: Props) => {
   const {allowFeedback = true} = props
   const [showFeedback, setShowFeedback] = React.useState(false)
-  const setShowFeedbackTrueLater = Kb.useTimeout(() => setShowFeedback(true), 7000)
+
   React.useEffect(() => {
-    if (!__STORYBOOK__) {
-      setShowFeedbackTrueLater()
-    }
-  }, [setShowFeedbackTrueLater])
+    const id = setTimeout(() => {
+      setShowFeedback(true)
+    }, 7000)
+    return () => clearTimeout(id)
+  }, [])
+
   return (
     <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.container} gap="small">
       <Kb.Icon type={props.onRetry ? 'icon-keybase-logo-logged-out-80' : 'icon-keybase-logo-80'} />
@@ -55,11 +56,11 @@ const Splash = (props: Props) => {
   )
 }
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
       container: {alignItems: 'center', justifyContent: 'center'},
-    } as const)
+    }) as const
 )
 
 export default React.memo(Splash)

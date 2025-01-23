@@ -1,4 +1,4 @@
-// RPC stats. Not keeping this in redux so we don't get any thrashing
+// RPC stats.
 
 const _stats: {
   eof: number
@@ -19,11 +19,9 @@ export const gotStat = (method: string, incoming: boolean) => {
   }
 
   const i = _stats[inKey][method]
-  i.count++
+  i && i.count++
 }
 
 export const gotEOF = () => {
   ++_stats.eof
 }
-
-export const getStats = () => _stats

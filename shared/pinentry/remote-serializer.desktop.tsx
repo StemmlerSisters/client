@@ -1,11 +1,12 @@
-import * as RPCTypes from '../constants/types/rpc-gen'
-import type * as Types from '../constants/types/pinentry'
+import * as T from '@/constants/types'
+import type * as Constants from '@/constants/pinentry'
+import {produce} from 'immer'
 
 export type ProxyProps = {
   darkMode: boolean
-} & Types.State
+} & Constants.Store
 
-type SerializeProps = ProxyProps
+export type SerializeProps = ProxyProps
 export type DeserializeProps = ProxyProps
 
 const initialState: DeserializeProps = {
@@ -17,7 +18,7 @@ const initialState: DeserializeProps = {
     label: '',
     readonly: false,
   },
-  type: RPCTypes.PassphraseType.none,
+  type: T.RPCGen.PassphraseType.none,
   windowTitle: '',
 }
 
@@ -25,8 +26,32 @@ export const serialize = (p: ProxyProps): Partial<SerializeProps> => p
 
 export const deserialize = (
   state: DeserializeProps = initialState,
-  props: SerializeProps
-): DeserializeProps => ({
-  ...state,
-  ...props,
-})
+  props?: Partial<SerializeProps>
+): DeserializeProps => {
+  if (!props) return state
+  const {darkMode, prompt, showTyping, type, windowTitle} = props
+  return produce(state, s => {
+    if (darkMode !== undefined) {
+      s.darkMode = darkMode
+    }
+    if (prompt !== undefined) {
+      s.prompt = prompt
+    }
+    if (showTyping !== undefined) {
+      if (s.showTyping) {
+        s.showTyping.allow = showTyping.allow
+        s.showTyping.defaultValue = showTyping.defaultValue
+        s.showTyping.label = showTyping.label
+        s.showTyping.readonly = showTyping.readonly
+      } else {
+        s.showTyping = showTyping
+      }
+    }
+    if (type !== undefined) {
+      s.type = type
+    }
+    if (windowTitle !== undefined) {
+      s.windowTitle = windowTitle
+    }
+  })
+}

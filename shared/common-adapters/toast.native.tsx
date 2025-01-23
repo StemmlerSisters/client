@@ -1,21 +1,21 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 import FloatingBox from './floating-box'
 import Box from './box'
 import {KeyboardAvoidingView2} from './keyboard-avoiding-view'
 import {useTimeout} from './use-timers'
 import {NativeAnimated, NativeEasing} from './native-wrappers.native'
 import type {Props} from './toast'
-import {colors, darkColors} from '../styles/colors'
-import {isDarkMode} from '../styles/dark-mode'
+import {colors, darkColors} from '@/styles/colors'
+import {isDarkMode} from '@/styles/dark-mode'
+import noop from 'lodash/noop'
 
 const Kb = {
   Box,
   FloatingBox,
   KeyboardAvoidingView2,
 }
-
-const noop = () => {}
 
 const Toast = (props: Props) => {
   const {visible} = props
@@ -55,6 +55,15 @@ const Toast = (props: Props) => {
     }
     return noop
   }, [shouldRender])
+
+  // since this uses portals we need to hide if we're hidden else we can get stuck showing if our render is frozen
+  C.Router2.useSafeFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        setShouldRender(false)
+      }
+    }, [])
+  )
 
   return shouldRender ? (
     <Kb.FloatingBox>

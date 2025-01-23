@@ -1,159 +1,164 @@
-import * as Chat2Gen from '../../../actions/chat2-gen'
-import * as Constants from '../../../constants/chat2'
-import * as Container from '../../../util/container'
-import * as Kb from '../../../common-adapters'
-import * as RPCChatTypes from '../../../constants/types/rpc-chat-gen'
+import * as C from '@/constants'
+import * as Kb from '@/common-adapters'
 import * as React from 'react'
 import * as RowSizes from './sizes'
-import * as Styles from '../../../styles'
-import type * as Types from '../../../constants/types/chat2'
+import * as T from '@/constants/types'
 
 type Props = {
   layoutChannelname: string
-  conversationIDKey: Types.ConversationIDKey
   navKey: string
   selected: boolean
+  layoutSnippetDecoration?: T.RPCChat.SnippetDecoration
 }
 
 const BigTeamChannel = React.memo(function BigTeamChannel(props: Props) {
-  const {conversationIDKey, selected, layoutChannelname} = props
-  const dispatch = Container.useDispatch()
-  const channelname =
-    Container.useSelector(state => Constants.getMeta(state, conversationIDKey).channelname) ||
-    layoutChannelname
-  const isError = Container.useSelector(
-    state => Constants.getMeta(state, conversationIDKey).trustedState === 'error'
-  )
-  const snippetDecoration = Container.useSelector(
-    state => Constants.getMeta(state, conversationIDKey).snippetDecoration
-  )
-  const hasBadge = Container.useSelector(state => Constants.getHasBadge(state, conversationIDKey))
-  const hasDraft = Container.useSelector(state => !selected && !!Constants.getDraft(state, conversationIDKey))
-  const hasUnread = Container.useSelector(state => Constants.getHasUnread(state, conversationIDKey))
-  const isMuted = Container.useSelector(state => Constants.isMuted(state, conversationIDKey))
+  const {selected, layoutChannelname, layoutSnippetDecoration} = props
+  const channelname = C.useChatContext(s => s.meta.channelname || layoutChannelname)
+  const isError = C.useChatContext(s => s.meta.trustedState === 'error')
+  const snippetDecoration = C.useChatContext(s => {
+    const d =
+      s.meta.conversationIDKey === C.Chat.noConversationIDKey
+        ? layoutSnippetDecoration ?? T.RPCChat.SnippetDecoration.none
+        : s.meta.snippetDecoration
 
-  const onSelectConversation = () =>
-    dispatch(Chat2Gen.createNavigateToThread({conversationIDKey, reason: 'inboxBig'}))
+    switch (d) {
+      case T.RPCChat.SnippetDecoration.pendingMessage:
+      case T.RPCChat.SnippetDecoration.failedPendingMessage:
+        return d
+      default:
+        return 0
+    }
+  })
+  const hasBadge = C.useChatContext(s => s.badge > 0)
+  const hasDraft = C.useChatContext(s => !!s.meta.draft)
+  const hasUnread = C.useChatContext(s => s.unread > 0)
+  const isMuted = C.useChatContext(s => s.meta.isMuted)
+  const navigateToThread = C.useChatContext(s => s.dispatch.navigateToThread)
+  const onSelectConversation = () => navigateToThread('inboxBig')
 
+  let outboxTooltip: string | undefined
   let outboxIcon: React.ReactNode = null
   switch (snippetDecoration) {
-    case RPCChatTypes.SnippetDecoration.pendingMessage:
+    case T.RPCChat.SnippetDecoration.pendingMessage:
+      outboxTooltip = 'Sending...'
       outboxIcon = (
-        <Kb.WithTooltip tooltip="Sending...">
-          <Kb.Icon
-            style={styles.icon}
-            sizeType="Small"
-            type={'iconfont-hourglass'}
-            color={selected ? Styles.globalColors.white : Styles.globalColors.black_20}
-          />
-        </Kb.WithTooltip>
+        <Kb.Icon
+          style={styles.icon}
+          sizeType="Small"
+          type={'iconfont-hourglass'}
+          color={selected ? Kb.Styles.globalColors.white : Kb.Styles.globalColors.black_20}
+        />
       )
       break
-    case RPCChatTypes.SnippetDecoration.failedPendingMessage:
+    case T.RPCChat.SnippetDecoration.failedPendingMessage:
+      outboxTooltip = 'Message failed to send'
       outboxIcon = (
-        <Kb.WithTooltip tooltip="Message failed to send">
-          <Kb.Icon
-            style={styles.icon}
-            type={'iconfont-exclamation'}
-            color={selected ? Styles.globalColors.white : Styles.globalColors.red}
-          />
-        </Kb.WithTooltip>
+        <Kb.Icon
+          style={styles.icon}
+          type={'iconfont-exclamation'}
+          color={selected ? Kb.Styles.globalColors.white : Kb.Styles.globalColors.red}
+        />
       )
       break
     default:
   }
 
-  const nameStyle = Styles.collapseStyles([
+  const nameStyle = Kb.Styles.collapseStyles([
     styles.channelText,
     isError
       ? styles.textError
       : selected
-      ? hasUnread
-        ? (styles.textSelectedBold as any)
-        : styles.textSelected
-      : hasUnread
-      ? styles.textPlainBold
-      : (styles.textPlain as any),
+        ? hasUnread
+          ? (styles.textSelectedBold as any)
+          : styles.textSelected
+        : hasUnread
+          ? styles.textPlainBold
+          : (styles.textPlain as any),
   ] as any)
 
   const name = (
-    <Kb.Text
+    <Kb.Text2
       lineClamp={1}
       type="Body"
-      fixOverdraw={Styles.isPhone}
-      style={Styles.collapseStyles([styles.channelHash, selected && styles.channelHashSelected])}
+      style={Kb.Styles.collapseStyles([styles.channelHash, selected && styles.channelHashSelected])}
     >
       #{' '}
-      <Kb.Text type={selected ? 'BodySemibold' : 'Body'} fixOverdraw={Styles.isPhone} style={nameStyle}>
+      <Kb.Text2 type={selected ? 'BodySemibold' : 'Body'} style={nameStyle}>
         {channelname}
-      </Kb.Text>
-    </Kb.Text>
+      </Kb.Text2>
+    </Kb.Text2>
   )
 
   const mutedIcon = isMuted ? (
-    <Kb.WithTooltip tooltip="Muted conversation">
+    <Kb.Box2 direction="vertical" tooltip="Muted conversation">
       <Kb.Icon
-        fixOverdraw={Styles.isPhone}
-        color={selected ? Styles.globalColors.white : Styles.globalColors.black_20}
+        fixOverdraw={Kb.Styles.isPhone}
+        color={selected ? Kb.Styles.globalColors.white : Kb.Styles.globalColors.black_20}
         style={styles.muted}
-        type={Styles.isPhone ? (selected ? 'icon-shh-active-26-21' : 'icon-shh-26-21') : 'iconfont-shh'}
+        type={Kb.Styles.isPhone ? (selected ? 'icon-shh-active-26-21' : 'icon-shh-26-21') : 'iconfont-shh'}
       />
-    </Kb.WithTooltip>
+    </Kb.Box2>
   ) : null
 
   const draftIcon = hasDraft ? (
-    <Kb.WithTooltip tooltip="Draft message">
-      <Kb.Icon
-        type="iconfont-edit"
-        style={styles.icon}
-        sizeType="Small"
-        color={selected ? Styles.globalColors.white : undefined}
-      />
-    </Kb.WithTooltip>
+    <Kb.Icon
+      type="iconfont-edit"
+      style={styles.icon}
+      sizeType="Small"
+      color={selected ? Kb.Styles.globalColors.white : undefined}
+    />
   ) : null
 
   return (
-    <Kb.ClickableBox onClick={onSelectConversation} style={styles.container}>
-      <Kb.Box2 direction="horizontal" fullHeight={true} style={styles.rowContainer}>
-        <Kb.Box2
-          className="hover_background_color_blueGreyDark"
-          direction="horizontal"
-          fullWidth={!Styles.isMobile}
-          style={Styles.collapseStyles([
-            styles.channelBackground,
-            selected && styles.selectedChannelBackground,
-          ])}
-        >
-          {name}
-          {mutedIcon}
-          <Kb.Box style={styles.iconContainer}>
-            {draftIcon}
-            {outboxIcon}
-            {hasBadge && <Kb.Box style={styles.unread} />}
-          </Kb.Box>
+    <Kb.Styles.CanFixOverdrawContext.Provider value={!Kb.Styles.isTablet}>
+      <Kb.ClickableBox onClick={onSelectConversation} style={styles.container}>
+        <Kb.Box2 direction="horizontal" fullHeight={true} style={styles.rowContainer}>
+          <Kb.Box2
+            className="hover_background_color_blueGreyDark"
+            direction="horizontal"
+            fullWidth={!Kb.Styles.isMobile}
+            style={Kb.Styles.collapseStyles([
+              styles.channelBackground,
+              selected && styles.selectedChannelBackground,
+            ])}
+          >
+            {name}
+            {mutedIcon}
+            <Kb.Box2
+              direction="horizontal"
+              alignSelf="center"
+              alignItems="center"
+              style={styles.iconContainer}
+              tooltip={outboxTooltip || hasDraft ? 'Draft message' : undefined}
+            >
+              {draftIcon}
+              {outboxIcon}
+              {hasBadge && <Kb.Box style={styles.unread} />}
+            </Kb.Box2>
+          </Kb.Box2>
         </Kb.Box2>
-      </Kb.Box2>
-    </Kb.ClickableBox>
+      </Kb.ClickableBox>
+    </Kb.Styles.CanFixOverdrawContext.Provider>
   )
 })
 
-const styles = Styles.styleSheetCreate(() => ({
-  channelBackground: Styles.platformStyles({
+const styles = Kb.Styles.styleSheetCreate(() => ({
+  channelBackground: Kb.Styles.platformStyles({
     common: {
-      ...Styles.globalStyles.flexBoxRow,
+      ...Kb.Styles.globalStyles.flexBoxRow,
       alignItems: 'center',
-      marginLeft: Styles.globalMargins.large,
-      paddingRight: Styles.globalMargins.xsmall,
+      marginLeft: Kb.Styles.globalMargins.large,
+      paddingRight: Kb.Styles.globalMargins.xsmall,
     },
     isElectron: {
       borderBottomLeftRadius: 3,
       borderTopLeftRadius: 3,
-      paddingLeft: Styles.globalMargins.tiny,
+      paddingLeft: Kb.Styles.globalMargins.tiny,
     },
     isPhone: {
-      ...Styles.globalStyles.fillAbsolute,
+      ...Kb.Styles.globalStyles.fillAbsolute,
       flex: 1,
-      paddingLeft: Styles.globalMargins.small,
+      paddingLeft: Kb.Styles.globalMargins.small,
     },
     isTablet: {
       borderBottomLeftRadius: 3,
@@ -161,61 +166,61 @@ const styles = Styles.styleSheetCreate(() => ({
       flex: 1,
       height: '80%',
       marginLeft: 48,
-      paddingLeft: Styles.globalMargins.tiny,
+      paddingLeft: Kb.Styles.globalMargins.tiny,
     },
   }),
-  channelHash: {color: Styles.globalColors.black_20},
-  channelHashSelected: {color: Styles.globalColors.white_60},
-  channelText: Styles.platformStyles({
+  channelHash: {color: Kb.Styles.globalColors.black_20},
+  channelHashSelected: {color: Kb.Styles.globalColors.white_60},
+  channelText: Kb.Styles.platformStyles({
     isElectron: {wordBreak: 'break-all'},
   }),
   container: {flexShrink: 0, height: RowSizes.bigRowHeight},
-  icon: {margin: 3},
+  icon: {
+    display: 'flex',
+    margin: 3,
+  },
   iconContainer: {
-    ...Styles.globalStyles.flexBoxRow,
-    alignItems: 'center',
-    alignSelf: 'stretch',
     flex: 1,
     justifyContent: 'flex-end',
   },
-  muted: {marginLeft: Styles.globalMargins.xtiny},
-  rowContainer: Styles.platformStyles({
+  muted: {marginLeft: Kb.Styles.globalMargins.xtiny},
+  rowContainer: Kb.Styles.platformStyles({
     common: {
       alignItems: 'stretch',
-      paddingLeft: Styles.globalMargins.tiny,
+      paddingLeft: Kb.Styles.globalMargins.tiny,
       paddingRight: 0,
     },
-    isElectron: Styles.desktopStyles.clickable,
+    isElectron: Kb.Styles.desktopStyles.clickable,
     isTablet: {alignItems: 'center'},
   }),
-  selectedChannelBackground: {backgroundColor: Styles.globalColors.blue},
-  textError: {color: Styles.globalColors.redDark},
-  textPlain: Styles.platformStyles({
-    common: {color: Styles.globalColors.black_63},
-    isPhone: {backgroundColor: Styles.globalColors.fastBlank},
+  selectedChannelBackground: {backgroundColor: Kb.Styles.globalColors.blue},
+  textError: {color: Kb.Styles.globalColors.redDark},
+  textPlain: Kb.Styles.platformStyles({
+    common: {color: Kb.Styles.globalColors.black_63},
+    isPhone: {backgroundColor: Kb.Styles.globalColors.fastBlank},
   }),
-  textPlainBold: Styles.platformStyles({
+  textPlainBold: Kb.Styles.platformStyles({
     common: {
-      color: Styles.globalColors.blackOrWhite,
-      ...Styles.globalStyles.fontBold,
+      color: Kb.Styles.globalColors.blackOrWhite,
+      ...Kb.Styles.globalStyles.fontBold,
     },
-    isPhone: {backgroundColor: Styles.globalColors.fastBlank},
+    isPhone: {backgroundColor: Kb.Styles.globalColors.fastBlank},
   }),
-  textSelected: {color: Styles.globalColors.white},
+  textSelected: {color: Kb.Styles.globalColors.white},
   textSelectedBold: {
-    color: Styles.globalColors.white,
-    ...Styles.globalStyles.fontBold,
+    color: Kb.Styles.globalColors.white,
+    ...Kb.Styles.globalStyles.fontBold,
   },
-  unread: Styles.platformStyles({
+  unread: Kb.Styles.platformStyles({
     common: {
-      backgroundColor: Styles.globalColors.orange,
-      borderRadius: Styles.borderRadius,
+      backgroundColor: Kb.Styles.globalColors.orange,
+      borderRadius: Kb.Styles.borderRadius,
       flexShrink: 0,
       height: 8,
       width: 8,
     },
     isMobile: {
-      marginRight: Styles.globalMargins.tiny,
+      marginRight: Kb.Styles.globalMargins.tiny,
     },
   }),
 }))

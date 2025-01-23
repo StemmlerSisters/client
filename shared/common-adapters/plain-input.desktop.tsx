@@ -1,36 +1,32 @@
 import * as React from 'react'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 import {getStyle as getTextStyle} from './text.desktop'
 import pick from 'lodash/pick'
-import logger from '../logger'
+import logger from '@/logger'
 import {checkTextInfo} from './input.shared'
 import type {InternalProps, TextInfo, Selection} from './plain-input'
+import {stringToUint8Array} from 'uint8array-extras'
 
 const maybeParseInt = (input: string | number, radix: number): number =>
   typeof input === 'string' ? parseInt(input, radix) : input
 // A plain text input component. Handles callbacks, text styling, and auto resizing but
 // adds no styling.
 class PlainInput extends React.PureComponent<InternalProps> {
-  _input = React.createRef<HTMLTextAreaElement | HTMLInputElement | null>()
-  _isComposingIME: boolean = false
+  private _input = React.createRef<HTMLTextAreaElement | HTMLInputElement | null>()
+  private _isComposingIME: boolean = false
   private mounted: boolean = true
-
-  static defaultProps = {
-    allowKeyboardEvents: true,
-    textType: 'Body',
-  }
 
   get value() {
     return this._input.current?.value ?? ''
   }
 
   // This is controlled if a value prop is passed
-  _controlled = () => typeof this.props.value === 'string'
+  private _controlled = () => typeof this.props.value === 'string'
 
-  _onChange = ({target: {value = ''}}) => {
+  private _onChange = ({target: {value = ''}}) => {
     if (this.props.maxBytes) {
       const {maxBytes} = this.props
-      if (Buffer.byteLength(value) > maxBytes) {
+      if (stringToUint8Array(value).byteLength > maxBytes) {
         return
       }
     }
@@ -39,8 +35,8 @@ class PlainInput extends React.PureComponent<InternalProps> {
     this._autoResize()
   }
 
-  _autoResizeLast = ''
-  _autoResize = () => {
+  private _autoResizeLast = ''
+  private _autoResize = () => {
     if (!this.props.multiline) {
       // no resizing height on single-line inputs
       return
@@ -101,8 +97,11 @@ class PlainInput extends React.PureComponent<InternalProps> {
       const newTextInfo = fn(textInfo)
       checkTextInfo(newTextInfo)
       n.value = newTextInfo.text
-      n.selectionStart = newTextInfo.selection.start
-      n.selectionEnd = newTextInfo.selection.end
+      // if we change this immediately it can fail
+      setTimeout(() => {
+        n.selectionStart = newTextInfo.selection.start
+        n.selectionEnd = newTextInfo.selection.end
+      }, 1)
 
       if (reflectChange && this._input.current) {
         this._onChange({target: this._input.current})
@@ -134,15 +133,15 @@ class PlainInput extends React.PureComponent<InternalProps> {
     }
   }
 
-  _onCompositionStart = () => {
+  private _onCompositionStart = () => {
     this._isComposingIME = true
   }
 
-  _onCompositionEnd = () => {
+  private _onCompositionEnd = () => {
     this._isComposingIME = false
   }
 
-  _onKeyDown = (e: React.KeyboardEvent) => {
+  private _onKeyDown = (e: React.KeyboardEvent) => {
     if (this._isComposingIME) {
       return
     }
@@ -154,7 +153,7 @@ class PlainInput extends React.PureComponent<InternalProps> {
     }
   }
 
-  _onKeyUp = (e: React.KeyboardEvent) => {
+  private _onKeyUp = (e: React.KeyboardEvent) => {
     if (this._isComposingIME) {
       return
     }
@@ -163,7 +162,7 @@ class PlainInput extends React.PureComponent<InternalProps> {
     }
   }
 
-  _onFocus = () => {
+  private _onFocus = () => {
     this.props.onFocus?.()
     this.props.selectTextOnFocus &&
       // doesn't work within the same tick
@@ -177,15 +176,18 @@ class PlainInput extends React.PureComponent<InternalProps> {
       )
   }
 
-  _onBlur = () => {
+  private _onBlur = () => {
     this.props.onBlur?.()
   }
 
-  _getCommonProps = () => {
+  private _getCommonProps = () => {
     const commonProps = {
       ...pick(this.props, ['maxLength', 'value']), // Props we should only passthrough if supplied
       autoFocus: this.props.autoFocus,
-      className: Styles.classNames(this.props.allowKeyboardEvents && 'mousetrap', this.props.className),
+      className: Styles.classNames(
+        (this.props.allowKeyboardEvents ?? true) && 'mousetrap',
+        this.props.className
+      ),
       onBlur: this._onBlur,
       onChange: this._onChange,
       onClick: this.props.onClick,
@@ -195,30 +197,30 @@ class PlainInput extends React.PureComponent<InternalProps> {
       onKeyDown: this._onKeyDown,
       onKeyUp: this._onKeyUp,
       placeholder: this.props.placeholder,
-      placeholderColor: this.props.placeholderColor,
       ref: this._input,
+      spellCheck: this.props.spellCheck,
       ...(this.props.disabled ? {readOnly: true} : {}),
     }
     return commonProps
   }
 
-  _getMultilineProps = () => {
+  private _getMultilineProps = () => {
     const rows = this.props.rowsMin || Math.min(2, this.props.rowsMax || 2)
-    const textStyle: any = getTextStyle(this.props.textType)
-    const heightStyles: any = {
+    const textStyle = getTextStyle(this.props.textType ?? 'Body')
+    const heightStyles: {minHeight: number; maxHeight?: number; overflowY?: 'hidden'} = {
       minHeight:
-        rows * (maybeParseInt(textStyle.lineHeight, 10) || 20) +
+        rows * (textStyle.lineHeight === undefined ? 20 : maybeParseInt(textStyle.lineHeight, 10) || 20) +
         (this.props.padding ? Styles.globalMargins[this.props.padding] * 2 : 0),
     }
     if (this.props.rowsMax) {
-      heightStyles.maxHeight = this.props.rowsMax * (maybeParseInt(textStyle.lineHeight, 10) || 20)
+      heightStyles.maxHeight =
+        this.props.rowsMax *
+        (textStyle.lineHeight === undefined ? 20 : maybeParseInt(textStyle.lineHeight, 10) || 20)
     } else {
       heightStyles.overflowY = 'hidden'
     }
 
-    const paddingStyles: any = this.props.padding
-      ? Styles.padding(Styles.globalMargins[this.props.padding])
-      : {}
+    const paddingStyles = this.props.padding ? Styles.padding(Styles.globalMargins[this.props.padding]) : {}
     return {
       ...this._getCommonProps(),
       rows,
@@ -231,12 +233,12 @@ class PlainInput extends React.PureComponent<InternalProps> {
         this.props.resize && styles.resize,
         this.props.growAndScroll && styles.growAndScroll,
         this.props.style,
-      ]),
+      ]) as React.CSSProperties,
     }
   }
 
-  _getSinglelineProps = () => {
-    const textStyle = getTextStyle(this.props.textType)
+  private _getSinglelineProps = () => {
+    const textStyle = getTextStyle(this.props.textType ?? 'Body')
     return {
       ...this._getCommonProps(),
       style: Styles.collapseStyles([
@@ -244,12 +246,12 @@ class PlainInput extends React.PureComponent<InternalProps> {
         styles.noChrome, // noChrome comes after to unset lineHeight in singleline
         this.props.flexable && styles.flexable,
         this.props.style,
-      ]),
+      ]) as React.CSSProperties,
       type: this.props.type,
     }
   }
 
-  _getInputProps = () => {
+  private _getInputProps = () => {
     return this.props.multiline ? this._getMultilineProps() : this._getSinglelineProps()
   }
 
@@ -268,11 +270,8 @@ class PlainInput extends React.PureComponent<InternalProps> {
     this.mounted = false
   }
 
-  _registerBodyEvents = (add: boolean) => {
+  private _registerBodyEvents = (add: boolean) => {
     const body = document.body
-    if (!body) {
-      return
-    }
     if (add) {
       body.addEventListener('keydown', this._globalKeyDownHandler)
       body.addEventListener('keypress', this._globalKeyDownHandler)
@@ -282,7 +281,7 @@ class PlainInput extends React.PureComponent<InternalProps> {
     }
   }
 
-  _globalKeyDownHandler = (ev: KeyboardEvent) => {
+  private _globalKeyDownHandler = (ev: KeyboardEvent) => {
     const target = ev.target
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
       return
@@ -304,26 +303,13 @@ class PlainInput extends React.PureComponent<InternalProps> {
   }
 
   render() {
-    const {ref, placeholderColor, ...inputProps} = this._getInputProps()
-    const realCSS = this.props.multiline
-      ? `
-textarea::-webkit-inner-spin-button {-webkit-appearance: none; margin: 0;}
-textarea::-webkit-input-placeholder { color: ${placeholderColor || Styles.globalColors.black_35}}
-textarea::-webkit-outer-spin-button {-webkit-appearance: none; margin: 0;}
-`
-      : `
-input::-webkit-inner-spin-button {-webkit-appearance: none; margin: 0;}
-input::-webkit-input-placeholder { color: ${placeholderColor || Styles.globalColors.black_35}}
-input::-webkit-outer-spin-button {-webkit-appearance: none; margin: 0;}
-`
-
+    const {ref, ...inputProps} = this._getInputProps()
     return (
       <>
-        <style>{realCSS}</style>
         {this.props.multiline ? (
-          <textarea {...inputProps} ref={ref as any} />
+          <textarea {...inputProps} ref={ref as any as React.RefObject<HTMLTextAreaElement>} />
         ) : (
-          <input {...inputProps} ref={ref as any} />
+          <input {...inputProps} ref={ref as any as React.RefObject<HTMLInputElement>} />
         )}
       </>
     )

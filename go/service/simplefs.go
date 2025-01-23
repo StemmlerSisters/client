@@ -906,3 +906,88 @@ func (s *SimpleFSHandler) SimpleFSCancelJournalUploads(
 	// large or the disk is slow, and this is a synchronous operation.
 	return cli.SimpleFSCancelJournalUploads(ctx, path)
 }
+
+// SimpleFSArchiveStart implements the SimpleFSInterface.
+func (s *SimpleFSHandler) SimpleFSArchiveStart(ctx context.Context,
+	arg keybase1.SimpleFSArchiveStartArg) (jobDesc keybase1.SimpleFSArchiveJobDesc, err error) {
+	cli, err := s.client(ctx)
+	if err != nil {
+		return keybase1.SimpleFSArchiveJobDesc{}, err
+	}
+	ctx, cancel := s.wrapContextWithTimeout(ctx)
+	defer cancel()
+	return cli.SimpleFSArchiveStart(ctx, arg)
+}
+
+// SimpleFSGetArchiveJobFreshness implements the SimpleFSInterface.
+func (s *SimpleFSHandler) SimpleFSGetArchiveJobFreshness(ctx context.Context, jobID string) (keybase1.SimpleFSArchiveJobFreshness, error) {
+	cli, err := s.client(ctx)
+	if err != nil {
+		return keybase1.SimpleFSArchiveJobFreshness{}, err
+	}
+	ctx, cancel := s.wrapContextWithTimeout(ctx)
+	defer cancel()
+	return cli.SimpleFSGetArchiveJobFreshness(ctx, jobID)
+}
+
+// SimpleFSArchiveCancelOrDismissJob implements the SimpleFSInterface.
+func (s *SimpleFSHandler) SimpleFSArchiveCancelOrDismissJob(ctx context.Context,
+	jobID string) (err error) {
+	cli, err := s.client(ctx)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := s.wrapContextWithTimeout(ctx)
+	defer cancel()
+	return cli.SimpleFSArchiveCancelOrDismissJob(ctx, jobID)
+}
+
+// SimpleFSArchiveCheckArchive implements the SimpleFSInterface.
+func (s *SimpleFSHandler) SimpleFSArchiveCheckArchive(ctx context.Context,
+	archiveZipFilePath string) (result keybase1.SimpleFSArchiveCheckArchiveResult, err error) {
+	cli, err := s.client(ctx)
+	if err != nil {
+		return keybase1.SimpleFSArchiveCheckArchiveResult{}, err
+	}
+	ctx, cancel := s.wrapContextWithTimeout(ctx)
+	defer cancel()
+	return cli.SimpleFSArchiveCheckArchive(ctx, archiveZipFilePath)
+}
+
+// SimpleFSGetArchiveStatus implements the SimpleFSInterface.
+func (s *SimpleFSHandler) SimpleFSGetArchiveStatus(ctx context.Context) (
+	status keybase1.SimpleFSArchiveStatus, err error) {
+	cli, err := s.client(ctx)
+	if err != nil {
+		return keybase1.SimpleFSArchiveStatus{}, err
+	}
+	ctx, cancel := s.wrapContextWithTimeout(ctx)
+	defer cancel()
+	return cli.SimpleFSGetArchiveStatus(ctx)
+}
+
+// SimpleFSArchiveAllFiles implements the SimpleFSInterface.
+func (s *SimpleFSHandler) SimpleFSArchiveAllFiles(
+	ctx context.Context, arg keybase1.SimpleFSArchiveAllFilesArg) (
+	keybase1.SimpleFSArchiveAllFilesResult, error) {
+	cli, err := s.client(ctx)
+	if err != nil {
+		return keybase1.SimpleFSArchiveAllFilesResult{}, err
+	}
+	ctx, cancel := s.wrapContextWithTimeout(ctx)
+	defer cancel()
+	return cli.SimpleFSArchiveAllFiles(ctx, arg)
+}
+
+// SimpleFSArchiveAllGitRepos implements the SimpleFSInterface.
+func (s *SimpleFSHandler) SimpleFSArchiveAllGitRepos(
+	ctx context.Context, arg keybase1.SimpleFSArchiveAllGitReposArg) (
+	keybase1.SimpleFSArchiveAllGitReposResult, error) {
+	cli, err := s.client(ctx)
+	if err != nil {
+		return keybase1.SimpleFSArchiveAllGitReposResult{}, err
+	}
+	ctx, cancel := s.wrapContextWithTimeout(ctx)
+	defer cancel()
+	return cli.SimpleFSArchiveAllGitRepos(ctx, arg)
+}

@@ -4,7 +4,7 @@
 package libkb
 
 import (
-	"crypto/x509"
+	"crypto/tls"
 	"net/http"
 	"net/url"
 	"testing"
@@ -32,8 +32,8 @@ func TestIsReddit(t *testing.T) {
 }
 
 const (
-	uriExpected  = "https://api-0.core.keybaseapi.com"
-	pingExpected = "https://api-0.core.keybaseapi.com/_/api/1.0/ping.json"
+	uriExpected  = "https://api-1.core.keybaseapi.com"
+	pingExpected = "https://api-1.core.keybaseapi.com/_/api/1.0/ping.json"
 )
 
 func TestProductionCA(t *testing.T) {
@@ -144,7 +144,7 @@ func checkX509Err(t *testing.T, err error) {
 		return
 	}
 
-	_, ok = b.Err.(x509.UnknownAuthorityError)
+	_, ok = b.Err.(*tls.CertificateVerificationError)
 	if !ok {
 		t.Errorf("url.Error Err field type: %T, expected x509.UnknownAuthorityError", b.Err)
 	}

@@ -99,7 +99,7 @@ func (g *gregorTestConnection) Reconnect(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (g *gregorTestConnection) OnConnect(ctx context.Context, conn *rpc.Connection,
+func (g *gregorTestConnection) OnConnect(ctx context.Context, _ *rpc.Connection,
 	cli rpc.GenericClient, srv *rpc.Server) error {
 	g.Debug(ctx, "logged in: authenticating")
 	ac := gregor1.AuthClient{Cli: cli}
@@ -1036,7 +1036,11 @@ func TestChatSrvGetInboxNonblockLocalMetadata(t *testing.T) {
 				return ibox.InboxRes.Items[i].Time.After(ibox.InboxRes.Items[j].Time)
 			})
 			for index, conv := range ibox.InboxRes.Items {
-				t.Logf("metadata snippet: index: %d snippet: %s time: %v", index, conv.LocalMetadata.Snippet,
+				snippet := "<nil>"
+				if conv.LocalMetadata != nil {
+					snippet = conv.LocalMetadata.Snippet
+				}
+				t.Logf("metadata snippet: index: %d snippet: %s time: %v", index, snippet,
 					conv.Time)
 			}
 			index := 0
@@ -1686,7 +1690,7 @@ func TestChatSrvGetThreadLocalMarkAsRead(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		expectedMessages := 4 // 3 messges and 1 TLF
+		expectedMessages := 4 // 3 messages and 1 TLF
 		require.Len(t, tv.Thread.Messages, expectedMessages,
 			"unexpected response from GetThreadLocal . number of messages")
 
@@ -7416,6 +7420,7 @@ func TestGlobalAppNotificationSettings(t *testing.T) {
 			chat1.GlobalAppNotificationSetting_PLAINTEXTDESKTOP: true,
 			chat1.GlobalAppNotificationSetting_PLAINTEXTMOBILE:  false,
 			chat1.GlobalAppNotificationSetting_DISABLETYPING:    false,
+			chat1.GlobalAppNotificationSetting_CONVERTHEIC:      true,
 		}
 
 		// convert the expectedSettings to the RPC format

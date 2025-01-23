@@ -6,6 +6,7 @@
 /* eslint-disable */
 
 const {getDefaultConfig} = require('@expo/metro-config')
+const {mergeConfig} = require('@react-native/metro-config')
 const {resolve} = require('metro-resolver')
 const path = require('path')
 const fs = require('fs')
@@ -33,21 +34,27 @@ const modules = []
   .sort()
 
 const defaultConfig = getDefaultConfig(__dirname)
-module.exports = {
+
+const blacklistRE = exclusionList(
+  []
+    // ignore desktop
+    .concat([new RegExp(`${path.join('desktop')}\\/.*$`)])
+    // We need to exclude the peerDependencies we've collected in packages' node_modules
+    .concat(
+      ...workspaces.map(it =>
+        modules.map(m => new RegExp(`^${escape(path.join(it, 'node_modules', m))}\\/.*$`))
+      )
+    )
+)
+
+module.exports = mergeConfig(defaultConfig, {
   // watch our rnmodules
   watchFolders: [root, path.resolve(__dirname, '../rnmodules')],
   resolver: {
     ...defaultConfig.resolver,
     assetExts: [...defaultConfig.resolver.assetExts, 'css'],
     sourceExts: [...defaultConfig.resolver.sourceExts, 'cjs', 'css'],
-    // We need to exclude the peerDependencies we've collected in packages' node_modules
-    blacklistRE: exclusionList(
-      [].concat(
-        ...workspaces.map(it =>
-          modules.map(m => new RegExp(`^${escape(path.join(it, 'node_modules', m))}\\/.*$`))
-        )
-      )
-    ),
+    blacklistRE,
     // When we import a package from the monorepo, metro won't be able to find their deps
     // We need to specify them in `extraNodeModules` to tell metro where to find them
     extraNodeModules: modules.reduce((acc, name) => {
@@ -72,4 +79,4 @@ module.exports = {
       },
     },
   },
-}
+})

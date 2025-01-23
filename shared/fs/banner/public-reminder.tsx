@@ -1,66 +1,49 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Kb from '../../common-adapters'
-import * as Types from '../../constants/types/fs'
-import * as Constants from '../../constants/fs'
-import openUrl from '../../util/open-url'
-import * as FsGen from '../../actions/fs-gen'
-import * as Container from '../../util/container'
+import * as Kb from '@/common-adapters'
+import * as T from '@/constants/types'
 
 type Props = {
-  path: Types.Path
+  path: T.FS.Path
 }
 
-const getTlfName = (parsedPath: Types.ParsedPath): string => {
-  if (parsedPath.kind === Types.PathKind.Root || parsedPath.kind === Types.PathKind.TlfList) {
+const getTlfName = (parsedPath: T.FS.ParsedPath): string => {
+  if (parsedPath.kind === T.FS.PathKind.Root || parsedPath.kind === T.FS.PathKind.TlfList) {
     return ''
   }
   return parsedPath.tlfName
 }
 
 const PublicBanner = ({path}: Props) => {
-  const isWritable = Container.useSelector(state => Constants.getPathItem(state.fs.pathItems, path).writable)
-  const lastPublicBannerClosedTlf = Container.useSelector(state => state.fs.lastPublicBannerClosedTlf)
-  const you = Container.useSelector(state => state.config.username)
+  const isWritable = C.useFSState(s => C.FS.getPathItem(s.pathItems, path).writable)
+  const lastPublicBannerClosedTlf = C.useFSState(s => s.lastPublicBannerClosedTlf)
+  const setLastPublicBannerClosedTlf = C.useFSState(s => s.dispatch.setLastPublicBannerClosedTlf)
 
-  const dispatch = Container.useDispatch()
-  const setLastClosed = () => dispatch(FsGen.createSetLastPublicBannerClosedTlf({tlf: tlfName}))
+  const setLastClosed = () => setLastPublicBannerClosedTlf(tlfName)
 
-  const parsedPath = Constants.parsePath(path)
+  const parsedPath = C.FS.parsePath(path)
   const tlfName = getTlfName(parsedPath)
 
   // If we're showing the banner for a new TLF, clear the closed state
   React.useEffect(() => {
     if (lastPublicBannerClosedTlf !== '' && lastPublicBannerClosedTlf !== tlfName) {
-      dispatch(FsGen.createSetLastPublicBannerClosedTlf({tlf: ''}))
+      setLastPublicBannerClosedTlf('')
     }
-  }, [dispatch, tlfName, lastPublicBannerClosedTlf])
+  }, [setLastPublicBannerClosedTlf, tlfName, lastPublicBannerClosedTlf])
 
-  if (parsedPath.kind !== Types.PathKind.GroupTlf && parsedPath.kind !== Types.PathKind.InGroupTlf) {
+  if (parsedPath.kind !== T.FS.PathKind.GroupTlf && parsedPath.kind !== T.FS.PathKind.InGroupTlf) {
     return null
   }
 
-  const isPublic = parsedPath.tlfType === Types.TlfType.Public
+  const isPublic = parsedPath.tlfType === T.FS.TlfType.Public
   const closedThisBannerLast = lastPublicBannerClosedTlf === tlfName
 
   if (!isWritable || !isPublic || closedThisBannerLast) {
     return null
   }
-  const url = `https://keybase.pub/${parsedPath.tlfName}`
   return (
     <Kb.Banner color="yellow" onClose={setLastClosed}>
-      <Kb.BannerParagraph
-        bannerColor="yellow"
-        content={
-          // keybase.pub only supports simple TLFs
-          tlfName === you
-            ? [
-                'Everything you upload in here can be viewed by everyone at ',
-                {onClick: () => openUrl(url), text: url},
-                '.',
-              ]
-            : ['Everything you upload here is public.']
-        }
-      />
+      <Kb.BannerParagraph bannerColor="yellow" content={['Everything you upload here is public.']} />
     </Kb.Banner>
   )
 }

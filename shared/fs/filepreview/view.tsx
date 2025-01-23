@@ -1,45 +1,46 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Styles from '../../styles'
-import * as Types from '../../constants/types/fs'
-import * as Constants from '../../constants/fs'
-import * as Container from '../../util/container'
-import * as RPCTypes from '../../constants/types/rpc-gen'
+import * as T from '@/constants/types'
 import DefaultView from './default-view-container'
-import ImageView from './image-view'
 import TextView from './text-view'
 import AVView from './av-view'
 import PdfView from './pdf-view'
-import * as Kb from '../../common-adapters'
-import * as Platform from '../../constants/platform'
+import * as Kb from '@/common-adapters'
 
 type Props = {
-  path: Types.Path
+  path: T.FS.Path
   onUrlError: (err: string) => void
 }
 
 const textViewUpperLimit = 10 * 1024 * 1024 // 10MB
 
-const FilePreviewView = ({path, onUrlError}: Props) => {
-  const pathItem = Container.useSelector(state => Constants.getPathItem(state.fs.pathItems, path))
+const FilePreviewView = (p: Props) => {
+  return (
+    <Kb.BoxGrow style={styles.container}>
+      <FilePreviewViewContent {...p} />
+    </Kb.BoxGrow>
+  )
+}
+
+const FilePreviewViewContent = ({path, onUrlError}: Props) => {
+  const pathItem = C.useFSState(s => C.FS.getPathItem(s.pathItems, path))
   const [loadedLastModifiedTimestamp, setLoadedLastModifiedTimestamp] = React.useState(
     pathItem.lastModifiedTimestamp
   )
   const reload = () => setLoadedLastModifiedTimestamp(pathItem.lastModifiedTimestamp)
-  const tooLargeForText = pathItem.type === Types.PathType.File && pathItem.size > textViewUpperLimit
+  const tooLargeForText = pathItem.type === T.FS.PathType.File && pathItem.size > textViewUpperLimit
 
-  const fileContext = Container.useSelector(
-    state => state.fs.fileContext.get(path) || Constants.emptyFileContext
-  )
+  const fileContext = C.useFSState(s => s.fileContext.get(path) || C.FS.emptyFileContext)
 
-  if (pathItem.type === Types.PathType.Symlink) {
+  if (pathItem.type === T.FS.PathType.Symlink) {
     return <DefaultView path={path} />
   }
 
-  if (pathItem.type !== Types.PathType.File) {
+  if (pathItem.type !== T.FS.PathType.File) {
     return <Kb.Text type="BodySmallError">This shouldn't happen type={pathItem.type}</Kb.Text>
   }
 
-  if (fileContext === Constants.emptyFileContext) {
+  if (fileContext === C.FS.emptyFileContext) {
     // We are still loading fileContext which is needed to determine which
     // component to use.
     return (
@@ -64,11 +65,20 @@ const FilePreviewView = ({path, onUrlError}: Props) => {
   // find out if resource has updated. So embed timestamp into URL to force a
   // reload when needed.
   const url = fileContext.url + `&unused_field_ts=${loadedLastModifiedTimestamp}`
-
   switch (fileContext.viewType) {
-    case RPCTypes.GUIViewType.default:
+    case T.RPCGen.GUIViewType.default: {
+      // mobile client only supports heic now
+      if (C.isIOS && C.Chat.isPathHEIC(pathItem.name)) {
+        return (
+          <>
+            {reloadBanner}
+            <Kb.ZoomableImage src={url} style={styles.zoomableBox} boxCacheKey="fsdef" />
+          </>
+        )
+      }
       return <DefaultView path={path} />
-    case RPCTypes.GUIViewType.text:
+    }
+    case T.RPCGen.GUIViewType.text:
       return tooLargeForText ? (
         <DefaultView path={path} />
       ) : (
@@ -77,23 +87,29 @@ const FilePreviewView = ({path, onUrlError}: Props) => {
           <TextView url={url} onUrlError={onUrlError} />
         </>
       )
-    case RPCTypes.GUIViewType.image:
+    case T.RPCGen.GUIViewType.image: {
+      // no webp
+      if (fileContext.contentType === 'image/webp') {
+        return <DefaultView path={path} />
+      }
+
       return (
         <>
           {reloadBanner}
-          <ImageView url={url} onUrlError={onUrlError} />
+          <Kb.ZoomableImage src={url} style={styles.zoomableBox} boxCacheKey="fsimg" />
         </>
       )
-    case RPCTypes.GUIViewType.audio:
-    case RPCTypes.GUIViewType.video:
+    }
+    case T.RPCGen.GUIViewType.audio: // fallthrough
+    case T.RPCGen.GUIViewType.video:
       return (
         <>
           {reloadBanner}
           <AVView url={url} onUrlError={onUrlError} />
         </>
       )
-    case RPCTypes.GUIViewType.pdf:
-      return !Platform.isAndroid ? (
+    case T.RPCGen.GUIViewType.pdf:
+      return !C.isAndroid ? (
         <>
           {reloadBanner}
           <PdfView url={url} onUrlError={onUrlError} />
@@ -108,7 +124,7 @@ const FilePreviewView = ({path, onUrlError}: Props) => {
 
 export default FilePreviewView
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
       banner: {
@@ -122,5 +138,14 @@ const styles = Styles.styleSheetCreate(
         width: '100%',
         zIndex: 200, // needed for mobile
       },
-    } as const)
+      container: {
+        width: '100%',
+      },
+      zoomableBox: {
+        backgroundColor: Kb.Styles.globalColors.blackOrBlack,
+        height: '100%',
+        position: 'relative',
+        width: '100%',
+      },
+    }) as const
 )

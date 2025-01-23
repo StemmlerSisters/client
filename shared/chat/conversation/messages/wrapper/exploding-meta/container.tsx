@@ -1,7 +1,6 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import {ConvoIDContext, OrdinalContext} from '../../ids-context'
-import * as Constants from '../../../../../constants/chat2'
-import * as Container from '../../../../../util/container'
+import {OrdinalContext} from '../../ids-context'
 import ExplodingMeta from '.'
 
 export type OwnProps = {
@@ -11,16 +10,34 @@ export type OwnProps = {
 const ExplodingMetaContainer = React.memo(function ExplodingMetaContainer(p: OwnProps) {
   const {onClick} = p
 
-  const conversationIDKey = React.useContext(ConvoIDContext)
   const ordinal = React.useContext(OrdinalContext)
 
-  const message = Container.useSelector(state => Constants.getMessage(state, conversationIDKey, ordinal))
-  if (!message || (message.type !== 'text' && message.type !== 'attachment') || !message.exploding) {
+  const {exploding, exploded, submitState, explodesAt, messageKey} = C.useChatContext(
+    C.useShallow(s => {
+      const message = s.messageMap.get(ordinal)
+      if (!message || (message.type !== 'text' && message.type !== 'attachment') || !message.exploding) {
+        return {
+          exploded: false,
+          explodesAt: 0,
+          exploding: false,
+          messageKey: '',
+          submitState: '',
+        }
+      }
+      const messageKey = C.Chat.getMessageKey(message)
+      const {exploding, exploded, submitState, explodingTime: explodesAt} = message
+      return {
+        exploded,
+        explodesAt,
+        exploding,
+        messageKey,
+        submitState,
+      }
+    })
+  )
+  if (!exploding) {
     return null
   }
-  const {exploded, submitState} = message
-  const explodesAt = message.explodingTime
-  const messageKey = Constants.getMessageKey(message)
   const pending = submitState === 'pending' || submitState === 'failed'
   const props = {
     exploded,

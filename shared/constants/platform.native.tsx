@@ -1,5 +1,4 @@
 import {Dimensions, Platform} from 'react-native'
-import * as iPhoneXHelper from 'react-native-iphone-x-helper'
 import Constants from 'expo-constants'
 import {
   androidIsDeviceSecure,
@@ -9,6 +8,8 @@ import {
 } from 'react-native-kb'
 
 export {version, androidIsTestDevice, uses24HourClock, fsCacheDir} from 'react-native-kb'
+
+export const isNewArch = !!global.__turboModuleProxy
 
 export const setSecureFlagSetting = androidSetSecureFlagSetting
 export const getSecureFlagSetting = androidGetSecureFlagSetting
@@ -21,7 +22,6 @@ export const pathSep = '/'
 export const isIOS = Platform.OS === 'ios'
 export const isAndroid = !isIOS
 export const isMobile = true
-export const isIPhoneX = iPhoneXHelper.isIphoneX()
 export const isTablet = Platform.OS === 'ios' && Platform.isPad
 export const isPhone = !isTablet
 
@@ -41,7 +41,7 @@ export const isAndroidNewerThanN = isAndroid && mobileOsVersionNumber >= 26
 export const shortcutSymbol = ''
 export const realDeviceName = Constants.deviceName ?? ''
 
-export const windowHeight = Dimensions.get('window').height
+const windowHeight = Dimensions.get('window').height
 // isLargeScreen means you have at larger screen like iPhone 6,7 or Pixel
 // See https://material.io/devices/
 export const isLargeScreen = windowHeight >= 667

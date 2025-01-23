@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/keybase/client/go/chat/giphy"
+	"github.com/keybase/client/go/chat/storage"
 	"github.com/keybase/client/go/kbhttp/manager"
 	"github.com/keybase/go-codec/codec"
 
@@ -36,7 +37,7 @@ import (
 
 const keyPrefixLen = 2
 
-var blankProgress = func(bytesComplete, bytesTotal int64) {}
+var blankProgress = func(_, _ int64) {}
 
 type AttachmentHTTPSrv struct {
 	sync.Mutex
@@ -253,20 +254,20 @@ type giphyGalleryInfo struct {
 }
 
 func (r *AttachmentHTTPSrv) getGiphyGallerySelectURL(ctx context.Context, convID chat1.ConversationID,
-	tlfName, targetURL string) string {
+	tlfName string, result chat1.GiphySearchResult) string {
 	addr, err := r.httpSrv.Addr()
 	if err != nil {
 		r.Debug(ctx, "getGiphySelectURL: failed to get HTTP server address: %s", err)
 		return ""
 	}
-	key, err := r.genURLKey(r.giphySelectPrefix, targetURL)
+	key, err := r.genURLKey(r.giphySelectPrefix, result)
 	if err != nil {
 		r.Debug(ctx, "getGiphySelectURL: failed to generate URL key: %s", err)
 		return ""
 	}
-	r.urlMap.Add(key, targetURL)
+	r.urlMap.Add(key, result)
 	return fmt.Sprintf("http://%s/%s?url=%s&convID=%s&tlfName=%s&key=%s", addr, r.endpoint,
-		url.QueryEscape(targetURL), convID, tlfName, key)
+		url.QueryEscape(result.TargetUrl), convID, tlfName, key)
 }
 
 func (r *AttachmentHTTPSrv) serveGiphyGallerySelect(ctx context.Context, w http.ResponseWriter,
@@ -276,7 +277,14 @@ func (r *AttachmentHTTPSrv) serveGiphyGallerySelect(ctx context.Context, w http.
 	strConvID := req.URL.Query().Get("convID")
 	tlfName := req.URL.Query().Get("tlfName")
 	key := req.URL.Query().Get("key")
-	if mapURL, ok := r.urlMap.Get(key); !ok || mapURL != url {
+
+	infoInt, ok := r.urlMap.Get(key)
+	if !ok {
+		r.makeError(ctx, w, http.StatusNotFound, "invalid key: %s", key)
+		return
+	}
+	result := infoInt.(chat1.GiphySearchResult)
+	if result.TargetUrl != url {
 		r.makeError(ctx, w, http.StatusNotFound, "invalid key: %s", key)
 		return
 	}
@@ -303,6 +311,11 @@ func (r *AttachmentHTTPSrv) serveGiphyGallerySelect(ctx context.Context, w http.
 	} else {
 		r.Debug(ctx, "serveGiphyGallerySelect: failed to get chat UI: %s", err)
 	}
+
+	err = storage.NewGiphyStore(r.G()).Put(ctx, uid, result)
+	if err != nil {
+		r.Debug(ctx, "serveGiphyGallerySelect: failed to track giphy select: %s", err)
+	}
 }
 
 func (r *AttachmentHTTPSrv) serveGiphyGallery(ctx context.Context, w http.ResponseWriter, req *http.Request) {
@@ -319,7 +332,7 @@ func (r *AttachmentHTTPSrv) serveGiphyGallery(ctx context.Context, w http.Respon
 		videoStr += fmt.Sprintf(`
 			<img style="height: 100%%" src="%s" onclick="sendMessage('%s')" />
 		`, res.PreviewUrl, r.getGiphyGallerySelectURL(ctx, galleryInfo.ConvID, galleryInfo.TlfName,
-			res.TargetUrl))
+			res))
 	}
 	res := fmt.Sprintf(`
 	<html>
@@ -600,8 +613,9 @@ func (r *AttachmentHTTPSrv) serve(w http.ResponseWriter, req *http.Request) {
 // Sign implements github.com/keybase/go/chat/s3.Signer interface.
 func (r *AttachmentHTTPSrv) Sign(payload []byte) ([]byte, error) {
 	arg := chat1.S3SignArg{
-		Payload: payload,
-		Version: 1,
+		Payload:   payload,
+		Version:   1,
+		TempCreds: true,
 	}
 	return r.ri().S3Sign(context.Background(), arg)
 }
@@ -626,7 +640,10 @@ func (r *RemoteAttachmentFetcher) StreamAttachment(ctx context.Context, convID c
 	asset chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer) (res io.ReadSeeker, err error) {
 	defer r.Trace(ctx, &err, "StreamAttachment")()
 	// Grab S3 params for the conversation
-	s3params, err := ri().GetS3Params(ctx, convID)
+	s3params, err := ri().GetS3Params(ctx, chat1.GetS3ParamsArg{
+		ConversationID: convID,
+		TempCreds:      true,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -638,7 +655,10 @@ func (r *RemoteAttachmentFetcher) FetchAttachment(ctx context.Context, w io.Writ
 	ri func() chat1.RemoteInterface, signer s3.Signer, progress types.ProgressReporter) (err error) {
 	defer r.Trace(ctx, &err, "FetchAttachment")()
 	// Grab S3 params for the conversation
-	s3params, err := ri().GetS3Params(ctx, convID)
+	s3params, err := ri().GetS3Params(ctx, chat1.GetS3ParamsArg{
+		ConversationID: convID,
+		TempCreds:      true,
+	})
 	if err != nil {
 		return err
 	}
@@ -654,7 +674,10 @@ func (r *RemoteAttachmentFetcher) DeleteAssets(ctx context.Context,
 	}
 
 	// get s3 params from server
-	s3params, err := ri().GetS3Params(ctx, convID)
+	s3params, err := ri().GetS3Params(ctx, chat1.GetS3ParamsArg{
+		ConversationID: convID,
+		TempCreds:      true,
+	})
 	if err != nil {
 		r.Debug(ctx, "error getting s3params: %s", err)
 		return err
@@ -802,7 +825,10 @@ func (c *CachingAttachmentFetcher) FetchAttachment(ctx context.Context, w io.Wri
 	}
 
 	// Grab S3 params for the conversation
-	s3params, err := ri().GetS3Params(ctx, convID)
+	s3params, err := ri().GetS3Params(ctx, chat1.GetS3ParamsArg{
+		ConversationID: convID,
+		TempCreds:      true,
+	})
 	if err != nil {
 		return err
 	}
@@ -893,7 +919,10 @@ func (c *CachingAttachmentFetcher) DeleteAssets(ctx context.Context,
 	}
 
 	// get s3 params from server
-	s3params, err := ri().GetS3Params(ctx, convID)
+	s3params, err := ri().GetS3Params(ctx, chat1.GetS3ParamsArg{
+		ConversationID: convID,
+		TempCreds:      true,
+	})
 	if err != nil {
 		c.Debug(ctx, "error getting s3params: %s", err)
 		return err

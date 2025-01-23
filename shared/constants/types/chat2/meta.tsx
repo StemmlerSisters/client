@@ -1,7 +1,7 @@
 // Metadata about a conversation.
+import type * as T from '@/constants/types'
 import type * as Common from './common'
 import type * as Message from './message'
-import type * as RPCChatTypes from '../rpc-chat-gen'
 import type * as TeamTypes from '../teams'
 import type {RetentionPolicy} from '../retention-policy'
 
@@ -16,12 +16,12 @@ export type PinnedMessageInfo = {
   pinnerUsername: string
 }
 
-export type ConversationMeta = {
+export type ConversationMeta = T.Immutable<{
   botAliases: {[key: string]: string}
-  botCommands: RPCChatTypes.ConversationCommandGroups
+  botCommands: T.RPCChat.ConversationCommandGroups
   cannotWrite: boolean
   channelname: string
-  commands: RPCChatTypes.ConversationCommandGroups
+  commands: T.RPCChat.ConversationCommandGroups
   conversationIDKey: Common.ConversationIDKey // should be the key for this meta EXCEPT for pendingConversationIDKey, in that case its the resolved conversation we're previewing,
   description: string
   descriptionDecorated: string
@@ -30,8 +30,8 @@ export type ConversationMeta = {
   inboxVersion: number
   isEmpty: boolean
   isMuted: boolean
-  maxMsgID: number
-  maxVisibleMsgID: number
+  maxMsgID: Message.MessageID
+  maxVisibleMsgID: Message.MessageID
   membershipType: MembershipType
   minWriterRole: TeamTypes.TeamRoleType // minimum role to be able to write into a channel,
   notificationsDesktop: NotificationsType
@@ -39,14 +39,14 @@ export type ConversationMeta = {
   notificationsMobile: NotificationsType
   offline: boolean
   pinnedMsg?: PinnedMessageInfo
-  readMsgID: number
+  readMsgID: Message.MessageID
   rekeyers: Set<string>
   resetParticipants: Set<string>
   retentionPolicy: RetentionPolicy
   snippet?: string
   snippetDecorated?: string
-  snippetDecoration: RPCChatTypes.SnippetDecoration
-  status: RPCChatTypes.ConversationStatus
+  snippetDecoration: T.RPCChat.SnippetDecoration
+  status: T.RPCChat.ConversationStatus
   supersededBy: Common.ConversationIDKey
   supersedes: Common.ConversationIDKey
   // We have a place in the team store that also stores `teamRetentionPolicy`.
@@ -61,4 +61,4 @@ export type ConversationMeta = {
   tlfname: string // just used for rpc calls,
   trustedState: MetaTrustedState
   wasFinalizedBy: string // a conversation can be finalized but not superseded,
-}
+}>

@@ -1,14 +1,10 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Styles from '../../styles'
-import * as Kb from '../../common-adapters'
-import type * as Types from '../../constants/types/teams'
-import * as TeamsGen from '../../actions/teams-gen'
-import * as Container from '../../util/container'
+import * as Kb from '@/common-adapters'
+import type * as T from '@/constants/types'
 import Banner from './banner'
 import TeamsFooter from './footer'
 import TeamRowNew from './team-row'
-import {memoize} from '../../util/memoize'
-import {pluralize} from '../../util/string'
 
 type DeletedTeam = {
   teamName: string
@@ -18,15 +14,15 @@ type DeletedTeam = {
 export type OwnProps = {
   loaded: boolean
   deletedTeams: ReadonlyArray<DeletedTeam>
-  newTeams: Set<Types.TeamID>
+  newTeams: ReadonlySet<T.Teams.TeamID>
   onHideChatBanner: () => void
-  onManageChat: (teamID: Types.TeamID) => void
-  onOpenFolder: (teamID: Types.TeamID) => void
+  onManageChat: (teamID: T.Teams.TeamID) => void
+  onOpenFolder: (teamID: T.Teams.TeamID) => void
   onReadMore: () => void
-  onViewTeam: (teamID: Types.TeamID) => void
-  teamresetusers: Map<Types.TeamID, Set<string>>
-  newTeamRequests: Map<Types.TeamID, Set<string>>
-  teams: Array<Types.TeamMeta>
+  onViewTeam: (teamID: T.Teams.TeamID) => void
+  teamresetusers: ReadonlyMap<T.Teams.TeamID, ReadonlySet<string>>
+  newTeamRequests: ReadonlyMap<T.Teams.TeamID, ReadonlySet<string>>
+  teams: ReadonlyArray<T.Teams.TeamMeta>
 }
 
 type HeaderProps = {
@@ -34,73 +30,6 @@ type HeaderProps = {
   onJoinTeam: () => void
 }
 export type Props = OwnProps & HeaderProps
-
-type RowProps = {
-  firstItem: boolean
-  name: string
-  membercount: number
-  isNew: boolean
-  isOpen: boolean
-  newRequests: number
-  onOpenFolder: () => void
-  onManageChat?: () => void
-  resetUserCount: number
-  onViewTeam: () => void
-}
-
-export const TeamRow = React.memo<RowProps>(function TeamRow(props: RowProps) {
-  const badgeCount = props.newRequests + props.resetUserCount
-  const ChatIcon = () => (
-    <Kb.Icon
-      style={{opacity: props.onManageChat ? 1 : 0.3}}
-      onClick={props.onManageChat}
-      type="iconfont-chat"
-    />
-  )
-  return (
-    <Kb.ListItem2
-      type="Small"
-      firstItem={props.firstItem}
-      onClick={props.onViewTeam}
-      icon={
-        <Kb.Box2 direction="vertical" style={styles.avatarContainer}>
-          <Kb.Avatar size={32} teamname={props.name} isTeam={true} />
-          {!!badgeCount && <Kb.Badge badgeNumber={badgeCount} badgeStyle={styles.badge} />}
-        </Kb.Box2>
-      }
-      body={
-        <Kb.Box2 direction="vertical" fullWidth={true} style={styles.maxWidth}>
-          <Kb.Box2 direction="horizontal" gap="tiny" alignSelf="flex-start" style={styles.maxWidth}>
-            <Kb.Text type="BodySemibold" lineClamp={1} style={styles.kerning}>
-              {props.name}
-            </Kb.Text>
-            {props.isOpen && (
-              <Kb.Meta title="open" backgroundColor={Styles.globalColors.green} style={styles.openMeta} />
-            )}
-          </Kb.Box2>
-          <Kb.Box2 direction="horizontal" gap="tiny" alignSelf="flex-start">
-            {props.isNew && <Kb.Meta title="new" backgroundColor={Styles.globalColors.orange} />}
-            <Kb.Text type="BodySmall">{getMembersText(props.membercount)}</Kb.Text>
-          </Kb.Box2>
-        </Kb.Box2>
-      }
-      action={
-        Styles.isMobile ? null : (
-          <Kb.Box2 direction="horizontal" gap="small" gapEnd={true} gapStart={true}>
-            {props.onOpenFolder && <Kb.Icon type="iconfont-folder-private" onClick={props.onOpenFolder} />}
-            {props.onManageChat ? (
-              <ChatIcon />
-            ) : (
-              <Kb.WithTooltip tooltip="You need to join this team before you can chat.">
-                <ChatIcon />
-              </Kb.WithTooltip>
-            )}
-          </Kb.Box2>
-        )
-      }
-    />
-  )
-})
 
 const TeamBigButtons = (props: HeaderProps & {empty: boolean}) => (
   <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.teamButtons} gap="tiny">
@@ -127,7 +56,7 @@ const TeamBigButtons = (props: HeaderProps & {empty: boolean}) => (
         <Kb.Icon type="icon-illustration-teams-96" />
       </Kb.Box2>
     </Kb.ClickableBox>
-    {props.empty && !Styles.isMobile && (
+    {props.empty && !Kb.Styles.isMobile && (
       <Kb.Text type="BodySmall" style={styles.emptyNote}>
         Keybase team chats are encrypted – unlike Slack – and work for any size group, from casual friends to
         large communities.
@@ -142,35 +71,41 @@ const sortOrderToTitle = {
   role: 'Your role',
 }
 const SortHeader = () => {
-  const dispatch = Container.useDispatch()
-  const onChangeSort = (sortOrder: Types.TeamListSort) =>
-    dispatch(TeamsGen.createSetTeamListFilterSort({sortOrder}))
-  const {popup, toggleShowingPopup, popupAnchor, showingPopup} = Kb.usePopup(getAttachmentRef => (
-    <Kb.FloatingMenu
-      attachTo={getAttachmentRef}
-      items={[
-        {icon: 'iconfont-team', onClick: () => onChangeSort('role'), title: sortOrderToTitle.role},
-        {
-          icon: 'iconfont-campfire',
-          onClick: () => onChangeSort('activity'),
-          title: sortOrderToTitle.activity,
-        },
-        {
-          icon: 'iconfont-sort-alpha',
-          onClick: () => onChangeSort('alphabetical'),
-          title: sortOrderToTitle.alphabetical,
-        },
-      ]}
-      closeOnSelect={true}
-      onHidden={toggleShowingPopup}
-      visible={showingPopup}
-      position="bottom left"
-    />
-  ))
-  const sortOrder = Container.useSelector(s => s.teams.teamListSort)
+  const onChangeSort = C.useTeamsState(s => s.dispatch.setTeamListSort)
+  const makePopup = React.useCallback(
+    (p: Kb.Popup2Parms) => {
+      const {attachTo, hidePopup} = p
+      return (
+        <Kb.FloatingMenu
+          attachTo={attachTo}
+          items={[
+            {icon: 'iconfont-team', onClick: () => onChangeSort('role'), title: sortOrderToTitle.role},
+            {
+              icon: 'iconfont-campfire',
+              onClick: () => onChangeSort('activity'),
+              title: sortOrderToTitle.activity,
+            },
+            {
+              icon: 'iconfont-sort-alpha',
+              onClick: () => onChangeSort('alphabetical'),
+              title: sortOrderToTitle.alphabetical,
+            },
+          ]}
+          closeOnSelect={true}
+          onHidden={hidePopup}
+          visible={true}
+          position="bottom left"
+        />
+      )
+    },
+    [onChangeSort]
+  )
+
+  const {popup, showPopup, popupAnchor} = Kb.usePopup2(makePopup)
+  const sortOrder = C.useTeamsState(s => s.teamListSort)
   return (
     <Kb.Box2 direction="horizontal" style={styles.sortHeader} alignItems="center" fullWidth={true}>
-      <Kb.ClickableBox onClick={toggleShowingPopup} ref={popupAnchor}>
+      <Kb.ClickableBox onClick={showPopup} ref={popupAnchor}>
         <Kb.Box2 direction="horizontal" gap="tiny" alignItems="center">
           <Kb.Icon type="iconfont-arrow-full-down" />
           <Kb.Text type="BodySmallSemibold">{sortOrderToTitle[sortOrder]}</Kb.Text>
@@ -181,77 +116,70 @@ const SortHeader = () => {
   )
 }
 
-const getMembersText = (count: number) => (count === -1 ? '' : `${count} ${pluralize('member', count)}`)
-
 type Row = {key: React.Key} & (
   | {type: '_banner' | '_sortHeader' | '_buttons' | '_footer'}
   | {team: DeletedTeam; type: 'deletedTeam'}
-  | {team: Types.TeamMeta; type: 'team'}
+  | {team: T.Teams.TeamMeta; type: 'team'}
 )
 
-class Teams extends React.PureComponent<Props> {
-  private teamsAndExtras = memoize(
-    (deletedTeams: Props['deletedTeams'], teams: Props['teams']): Array<Row> => [
-      {key: '_buttons', type: '_buttons' as const},
-      {key: '_sortHeader', type: '_sortHeader' as const},
-      ...deletedTeams.map(dt => ({key: 'deletedTeam' + dt.teamName, team: dt, type: 'deletedTeam' as const})),
-      ...teams.map(team => ({key: team.id, team, type: 'team' as const})),
-      {key: '_footer', type: '_footer' as const},
-    ]
+const Teams = React.memo(function Teams(p: Props) {
+  const {deletedTeams, teams, onReadMore, onCreateTeam, onHideChatBanner, onJoinTeam} = p
+
+  const items = React.useMemo(
+    (): ReadonlyArray<Row> =>
+      [
+        {key: '_buttons', type: '_buttons'},
+        {key: '_sortHeader', type: '_sortHeader'},
+        ...deletedTeams.map(
+          dt => ({key: 'deletedTeam' + dt.teamName, team: dt, type: 'deletedTeam'}) as const
+        ),
+        ...teams.map(team => ({key: team.id, team, type: 'team'}) as const),
+        {key: '_footer', type: '_footer'},
+      ] as const,
+    [deletedTeams, teams]
   )
 
-  private onHideChatBanner = () => {
-    this.props.onHideChatBanner()
-  }
-
-  private renderItem = (index: number, item: Row) => {
-    switch (item.type) {
-      case '_banner':
-        return <Banner onReadMore={this.props.onReadMore} onHideChatBanner={this.onHideChatBanner} />
-      case '_footer':
-        return <TeamsFooter empty={this.props.teams.length === 0} />
-      case '_buttons':
-        return (
-          <TeamBigButtons
-            onCreateTeam={this.props.onCreateTeam}
-            onJoinTeam={this.props.onJoinTeam}
-            empty={this.props.teams.length === 0}
-          />
-        )
-      case '_sortHeader':
-        return <SortHeader />
-      case 'deletedTeam': {
-        const {deletedBy, teamName} = item.team
-        return (
-          <Kb.Banner color="blue" key={'deletedTeamBannerFor' + teamName}>
-            <Kb.BannerParagraph
-              bannerColor="blue"
-              content={`The ${teamName} team was deleted by ${deletedBy}.`}
-            />
-          </Kb.Banner>
-        )
+  const renderItem = React.useCallback(
+    (index: number, item: Row) => {
+      switch (item.type) {
+        case '_banner':
+          return <Banner onReadMore={onReadMore} onHideChatBanner={onHideChatBanner} />
+        case '_footer':
+          return <TeamsFooter empty={teams.length === 0} />
+        case '_buttons':
+          return (
+            <TeamBigButtons onCreateTeam={onCreateTeam} onJoinTeam={onJoinTeam} empty={teams.length === 0} />
+          )
+        case '_sortHeader':
+          return <SortHeader />
+        case 'deletedTeam': {
+          const {deletedBy, teamName} = item.team
+          return (
+            <Kb.Banner color="blue" key={'deletedTeamBannerFor' + teamName}>
+              <Kb.BannerParagraph
+                bannerColor="blue"
+                content={`The ${teamName} team was deleted by ${deletedBy}.`}
+              />
+            </Kb.Banner>
+          )
+        }
+        case 'team': {
+          const team = item.team
+          return <TeamRowNew firstItem={index === 2} showChat={!Kb.Styles.isMobile} teamID={team.id} />
+        }
       }
-      case 'team': {
-        const team = item.team
-        return <TeamRowNew firstItem={index === 2} showChat={!Styles.isMobile} teamID={team.id} />
-      }
-    }
-  }
+    },
+    [onCreateTeam, onHideChatBanner, onJoinTeam, onReadMore, teams]
+  )
 
-  render() {
-    return (
-      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.container}>
-        <Kb.List
-          items={this.teamsAndExtras(this.props.deletedTeams, this.props.teams)}
-          renderItem={this.renderItem}
-          style={Styles.globalStyles.fullHeight}
-        />
-      </Kb.Box2>
-    )
-  }
-}
+  return (
+    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.container}>
+      <Kb.List items={items} renderItem={renderItem} style={Kb.Styles.globalStyles.fullHeight} />
+    </Kb.Box2>
+  )
+})
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
       avatarContainer: {position: 'relative'},
@@ -260,43 +188,43 @@ const styles = Styles.styleSheetCreate(
         right: -5,
         top: -5,
       },
-      bigButton: Styles.platformStyles({
+      bigButton: Kb.Styles.platformStyles({
         common: {
-          borderColor: Styles.globalColors.black_10,
+          borderColor: Kb.Styles.globalColors.black_10,
           borderRadius: 8,
           borderStyle: 'solid',
           borderWidth: 1,
         },
-        isElectron: {padding: Styles.globalMargins.small},
+        isElectron: {padding: Kb.Styles.globalMargins.small},
         isMobile: {
-          ...Styles.padding(Styles.globalMargins.small, 0),
-          backgroundColor: Styles.globalColors.white,
+          ...Kb.Styles.padding(Kb.Styles.globalMargins.small, 0),
+          backgroundColor: Kb.Styles.globalColors.white,
           width: 140,
         },
       }),
-      container: {backgroundColor: Styles.globalColors.blueGrey},
-      emptyNote: Styles.padding(60, 42, Styles.globalMargins.medium, Styles.globalMargins.medium),
+      container: {backgroundColor: Kb.Styles.globalColors.blueGrey},
+      emptyNote: Kb.Styles.padding(60, 42, Kb.Styles.globalMargins.medium, Kb.Styles.globalMargins.medium),
       kerning: {letterSpacing: 0.2},
       maxWidth: {maxWidth: '100%'},
       openMeta: {alignSelf: 'center'},
       relative: {position: 'relative'},
-      sortHeader: Styles.platformStyles({
-        common: {backgroundColor: Styles.globalColors.blueGrey},
-        isElectron: {...Styles.padding(Styles.globalMargins.tiny, Styles.globalMargins.small)},
-        isMobile: {...Styles.padding(Styles.globalMargins.xsmall, Styles.globalMargins.tiny)},
+      sortHeader: Kb.Styles.platformStyles({
+        common: {backgroundColor: Kb.Styles.globalColors.blueGrey},
+        isElectron: {...Kb.Styles.padding(Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.small)},
+        isMobile: {...Kb.Styles.padding(Kb.Styles.globalMargins.xsmall, Kb.Styles.globalMargins.tiny)},
       }),
       teamButtons: {
-        ...Styles.padding(Styles.globalMargins.xsmall, Styles.globalMargins.small),
-        backgroundColor: Styles.globalColors.blueGrey,
+        ...Kb.Styles.padding(Kb.Styles.globalMargins.xsmall, Kb.Styles.globalMargins.small),
+        backgroundColor: Kb.Styles.globalColors.blueGrey,
         justifyContent: 'flex-start',
       },
       teamPlus: {
         bottom: -2,
-        color: Styles.globalColors.blue,
+        color: Kb.Styles.globalColors.blue,
         position: 'absolute',
         right: -1,
       },
-    } as const)
+    }) as const
 )
 
 export default Teams

@@ -1,70 +1,63 @@
 // parallax animated rover while waiting for a search
 import * as React from 'react'
-import * as Kb from '../../common-adapters'
-import * as Styles from '../../styles'
-import {useSpring, animated} from 'react-spring'
+import * as Kb from '@/common-adapters'
 
 const widthX = window.innerWidth
 const heightY = window.innerHeight
 
-const calc = (x: number, y: number) => [(x - widthX / 2) / widthX, (y - heightY / 2) / heightY]
+const calcx = (x: number) => (x - widthX / 2) / widthX
+const calcy = (y: number) => (y - heightY / 2) / heightY
 const transBackgroundX = (x: number) => -100 + x * 3
-const transBackgroundY = (_x: number, y: number) => y
+const transBackgroundY = (y: number) => y
 const transForegroundX = (x: number) => -100 + x * 30
-const transForegroundY = (_x: number, y: number) => y
+const transForegroundY = (y: number) => y
 const transRoverX = (x: number) => 160 + x * 20
 const transRoverY = (x: number, y: number) => 70 + x * 2 + 3 * y
 
 const Rover = () => {
-  const [props, set] = useSpring(() => ({config: {friction: 140, mass: 10, tension: 550}, xy: [0, 0]}))
+  const [x, setX] = React.useState(0)
+  const [y, setY] = React.useState(0)
 
   React.useEffect(() => {
-    const onMouseMove = (e: any) => {
-      const {clientX: x, clientY: y} = e
-      set({xy: calc(x, y)})
+    const onMouseMove = (e: {clientX: number; clientY: number}) => {
+      const {clientX, clientY} = e
+      setX(calcx(clientX))
+      setY(calcy(clientY))
     }
-
     window.addEventListener('mousemove', onMouseMove, {passive: true})
     return () => {
-      // @ts-ignore mdn suggests we should use the same values as addEventListener
-      window.removeEventListener('mousemove', onMouseMove, {passive: true})
+      window.removeEventListener('mousemove', onMouseMove)
     }
-  }, [set])
+  }, [])
   return (
     <div style={styles.container}>
-      <animated.div
+      <div
         style={{
           ...styles.foreground,
-          // @ts-ignore doesn't understand function form
-          bottom: props.xy.interpolate(transBackgroundY),
-          // @ts-ignore doesn't understand function form
-          left: props.xy.interpolate(transBackgroundX),
+          bottom: transBackgroundY(y),
+          left: transBackgroundX(x),
         }}
       >
-        <Kb.Icon style={styles.background} type="icon-illustration-mars-rover-background" />
-      </animated.div>
-      <animated.div
+        <Kb.Icon style={styles.background} type="icon-illustration-mars-rover-background" allowLazy={false} />
+      </div>
+      <div
         style={{
           ...styles.rover,
-          // @ts-ignore doesn't understand function form
-          bottom: props.xy.interpolate(transRoverY),
-          // @ts-ignore doesn't understand function form
-          left: props.xy.interpolate(transRoverX),
+          bottom: transRoverY(x, y),
+          left: transRoverX(x),
         }}
       >
-        <Kb.Icon type="icon-illustration-mars-rover" />
-      </animated.div>
-      <animated.div
+        <Kb.Icon type="icon-illustration-mars-rover" allowLazy={false} />
+      </div>
+      <div
         style={{
           ...styles.foreground,
-          // @ts-ignore doesn't understand function form
-          bottom: props.xy.interpolate(transForegroundY),
-          // @ts-ignore doesn't understand function form
-          left: props.xy.interpolate(transForegroundX),
+          bottom: transForegroundY(y),
+          left: transForegroundX(x),
         }}
       >
-        <Kb.Icon style={styles.foreground} type="icon-illustration-mars-rover-foreground" />
-      </animated.div>
+        <Kb.Icon style={styles.foreground} type="icon-illustration-mars-rover-foreground" allowLazy={false} />
+      </div>
     </div>
   )
 }
@@ -75,7 +68,7 @@ const common = {
   position: 'absolute',
 } as const
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
       background: {...common, bottom: 10},
@@ -85,7 +78,7 @@ const styles = Styles.styleSheetCreate(
         ...common,
         bottom: 70,
       },
-    } as const)
+    }) as const
 )
 
 export default Rover

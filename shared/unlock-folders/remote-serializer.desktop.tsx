@@ -1,15 +1,21 @@
-import type {State} from '../constants/types/unlock-folders'
+import * as T from '@/constants/types'
+import type * as ConfigConstants from '@/constants/config'
+import {produce} from 'immer'
+
 export type ProxyProps = {
   darkMode: boolean
-} & Pick<State, 'devices' | 'paperkeyError' | 'phase' | 'waiting'>
+  devices: ConfigConstants.Store['unlockFoldersDevices']
+  paperKeyError: string
+  waiting: boolean
+}
 
-type SerializeProps = ProxyProps
+export type SerializeProps = ProxyProps
 export type DeserializeProps = ProxyProps
 
 const initialState: DeserializeProps = {
   darkMode: false,
   devices: [],
-  phase: 'dead',
+  paperKeyError: '',
   waiting: false,
 }
 
@@ -17,8 +23,23 @@ export const serialize = (p: ProxyProps): Partial<SerializeProps> => p
 
 export const deserialize = (
   state: DeserializeProps = initialState,
-  props: SerializeProps
-): DeserializeProps => ({
-  ...state,
-  ...props,
-})
+  props?: Partial<SerializeProps>
+): DeserializeProps => {
+  if (!props) return state
+
+  const {darkMode, devices, paperKeyError, waiting} = props
+  return produce(state, s => {
+    if (darkMode !== undefined) {
+      s.darkMode = darkMode
+    }
+    if (devices !== undefined) {
+      s.devices = T.castDraft(devices)
+    }
+    if (paperKeyError !== undefined) {
+      s.paperKeyError = paperKeyError
+    }
+    if (waiting !== undefined) {
+      s.waiting = waiting
+    }
+  })
+}

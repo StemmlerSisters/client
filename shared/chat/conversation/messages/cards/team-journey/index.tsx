@@ -1,7 +1,6 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Kb from '../../../../../common-adapters'
-import * as Styles from '../../../../../styles'
-import type * as ChatTypes from '../../../../../constants/types/chat2'
+import * as Kb from '@/common-adapters'
 
 export type Action =
   | {
@@ -14,8 +13,7 @@ export type Mode = 'chat' | 'team-settings'
 
 type Props = {
   actions: Array<Action>
-  conversationIDKey: ChatTypes.ConversationIDKey
-  image: Kb.IconType | null
+  image?: Kb.IconType
   onAuthorClick: () => void
   onDismiss: () => void
   teamname: string
@@ -25,12 +23,13 @@ type Props = {
 }
 
 export const TeamJourney = (props: Props) => {
-  const {conversationIDKey, teamname, mode} = props
+  const {teamname, mode} = props
 
   const contentHorizontalPadStyle =
     mode === 'chat'
-      ? (styles.contentHorizontalPadChat as Styles.StylesCrossPlatform)
+      ? (styles.contentHorizontalPadChat as Kb.Styles.StylesCrossPlatform)
       : styles.contentHorizontalPadTeamSettings
+  const conversationIDKey = C.useChatContext(s => s.id)
 
   return (
     <>
@@ -45,17 +44,21 @@ export const TeamJourney = (props: Props) => {
         key="content"
         direction="vertical"
         fullWidth={true}
-        style={Styles.collapseStyles([styles.content, props.image ? styles.contentWithImage : null])}
+        style={Kb.Styles.collapseStyles([styles.content, props.image ? styles.contentWithImage : null])}
       >
         <Kb.Box2 direction="horizontal" fullWidth={true} style={contentHorizontalPadStyle}>
-          <Kb.Box2 direction="horizontal" style={props.image ? styles.text : undefined}>
+          <Kb.Box2
+            direction="horizontal"
+            style={props.image ? styles.text : undefined}
+            alignSelf="flex-start"
+          >
             {props.textComponent}
           </Kb.Box2>
           {!!props.image && (
             <Kb.Icon
               style={
                 props.mode === 'team-settings'
-                  ? (styles.imageSettingsTab as Styles.StylesCrossPlatform)
+                  ? (styles.imageSettingsTab as Kb.Styles.StylesCrossPlatform)
                   : styles.image
               }
               type={props.image}
@@ -68,10 +71,10 @@ export const TeamJourney = (props: Props) => {
             fullWidth={true}
             alignItems={'flex-start'}
             gap="tiny"
-            style={Styles.collapseStyles([styles.actionsBox, contentHorizontalPadStyle] as const)}
+            style={Kb.Styles.collapseStyles([styles.actionsBox, contentHorizontalPadStyle] as const)}
           >
             {props.actions.map(action =>
-              action == 'wave' ? (
+              action === 'wave' ? (
                 <Kb.WaveButton
                   key="wave"
                   conversationIDKey={conversationIDKey}
@@ -135,7 +138,7 @@ const TeamJourneyHeader = (props: HeaderProps) => {
         </Kb.Text>
         <Kb.Text type="BodyTiny">• System message</Kb.Text>
       </Kb.Box2>
-      {!Styles.isMobile && !props.deactivateButtons && (
+      {!Kb.Styles.isMobile && !props.deactivateButtons && (
         <Kb.Icon type="iconfont-close" onClick={props.onDismiss} fontSize={12} />
       )}
     </Kb.Box2>
@@ -144,93 +147,87 @@ const TeamJourneyHeader = (props: HeaderProps) => {
 
 const buttonSpace = 6
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
-      actionsBox: Styles.platformStyles({
+      actionsBox: Kb.Styles.platformStyles({
         common: {
-          marginTop: Styles.globalMargins.tiny - buttonSpace,
+          marginTop: Kb.Styles.globalMargins.tiny - buttonSpace,
         },
-        isElectron: {
-          flexWrap: 'wrap',
-        },
+        isElectron: {flexWrap: 'wrap'},
       }),
-      authorContainer: Styles.platformStyles({
+      authorContainer: Kb.Styles.platformStyles({
         common: {
           alignItems: 'flex-start',
           alignSelf: 'flex-start',
-          height: Styles.globalMargins.mediumLarge,
+          height: Kb.Styles.globalMargins.mediumLarge,
         },
         isMobile: {marginTop: 8},
       }),
-      avatarChat: Styles.platformStyles({
+      avatarChat: Kb.Styles.platformStyles({
         isElectron: {
-          marginLeft: Styles.globalMargins.small,
-          marginTop: Styles.globalMargins.xtiny,
+          marginLeft: Kb.Styles.globalMargins.small,
+          marginTop: Kb.Styles.globalMargins.xtiny,
         },
-        isMobile: {marginLeft: Styles.globalMargins.tiny},
+        isMobile: {marginLeft: Kb.Styles.globalMargins.tiny},
       }),
-      avatarTeamSettings: Styles.platformStyles({
+      avatarTeamSettings: Kb.Styles.platformStyles({
         isElectron: {
-          marginLeft: Styles.globalMargins.tiny,
+          marginLeft: Kb.Styles.globalMargins.tiny,
           marginTop: 0,
         },
-        isMobile: {marginLeft: Styles.globalMargins.xtiny},
+        isMobile: {marginLeft: Kb.Styles.globalMargins.xtiny},
       }),
       bottomLine: {
-        ...Styles.globalStyles.flexGrow,
+        ...Kb.Styles.globalStyles.flexGrow,
         alignItems: 'baseline',
       },
       buttonSpace: {
         marginTop: buttonSpace,
       },
-      content: Styles.platformStyles({
-        isElectron: {
-          marginTop: -16,
-        },
-        isMobile: {
-          marginTop: -12,
-          paddingBottom: 3,
-        },
+      content: Kb.Styles.platformStyles({
+        isElectron: {},
+        isMobile: {paddingBottom: 3},
       }),
-      contentHorizontalPadChat: Styles.platformStyles({
+      contentHorizontalPadChat: Kb.Styles.platformStyles({
         isElectron: {
           paddingLeft:
             // Space for below the avatar
-            Styles.globalMargins.tiny + // right margin
-            Styles.globalMargins.small + // left margin
-            Styles.globalMargins.mediumLarge, // avatar
-          paddingRight: Styles.globalMargins.tiny,
+            Kb.Styles.globalMargins.tiny + // right margin
+            Kb.Styles.globalMargins.small + // left margin
+            Kb.Styles.globalMargins.mediumLarge, // avatar
+          paddingRight: Kb.Styles.globalMargins.tiny,
         },
         isMobile: {
           paddingLeft:
             // Space for below the avatar
-            Styles.globalMargins.tiny + // right margin
-            Styles.globalMargins.tiny + // left margin
-            Styles.globalMargins.mediumLarge, // avatar
+            Kb.Styles.globalMargins.tiny + // right margin
+            Kb.Styles.globalMargins.tiny + // left margin
+            Kb.Styles.globalMargins.mediumLarge, // avatar
         },
       }),
-      contentHorizontalPadTeamSettings: Styles.platformStyles({
+      contentHorizontalPadTeamSettings: Kb.Styles.platformStyles({
         isElectron: {
           paddingLeft:
             // Space for below the avatar
-            Styles.globalMargins.tiny + // right margin
-            Styles.globalMargins.tiny + // left margin
-            Styles.globalMargins.mediumLarge, // avatar
-          paddingRight: Styles.globalMargins.tiny,
+            Kb.Styles.globalMargins.tiny + // right margin
+            Kb.Styles.globalMargins.tiny + // left margin
+            Kb.Styles.globalMargins.mediumLarge, // avatar
+          paddingRight: Kb.Styles.globalMargins.tiny,
         },
         isMobile: {
           paddingLeft:
             // Space for below the avatar
-            Styles.globalMargins.tiny + // right margin
-            Styles.globalMargins.tiny + // left margin
-            Styles.globalMargins.mediumLarge, // avatar
+            Kb.Styles.globalMargins.tiny + // right margin
+            Kb.Styles.globalMargins.tiny + // left margin
+            Kb.Styles.globalMargins.mediumLarge, // avatar
         },
       }),
-      contentWithImage: {
-        minHeight: 70,
-      },
-      image: Styles.platformStyles({
+      contentWithImage: {minHeight: 70},
+      image: Kb.Styles.platformStyles({
+        isElectron: {marginTop: -33},
+      }),
+      imageSettingsTab: Kb.Styles.platformStyles({
         common: {
           position: 'absolute',
           top: 0,
@@ -239,32 +236,9 @@ const styles = Styles.styleSheetCreate(
           left: '50%',
           marginLeft: 15,
         },
-        isMobile: {
-          right: 40,
-        },
+        isMobile: {right: 25},
       }),
-      imageSettingsTab: Styles.platformStyles({
-        common: {
-          position: 'absolute',
-          top: 0,
-        },
-        isElectron: {
-          left: '50%',
-          marginLeft: 15,
-        },
-        isMobile: {
-          right: 25,
-        },
-      }),
-      teamnameText: Styles.platformStyles({
-        common: {
-          color: Styles.globalColors.black,
-        },
-      }),
-      text: {
-        maxWidth: '45%',
-      },
-    } as const)
+      teamnameText: {color: Kb.Styles.globalColors.black},
+      text: {maxWidth: Kb.Styles.isMobile ? '70%' : 320},
+    }) as const
 )
-
-export default TeamJourney

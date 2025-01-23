@@ -1,16 +1,14 @@
 import {TransportShared, sharedCreateClient, rpcLog} from './transport-shared'
 import {encode} from '@msgpack/msgpack'
-import type {SendArg, incomingRPCCallbackType, connectDisconnectCB} from './index.platform'
-import logger from '../logger'
+import type {IncomingRPCCallbackType, ConnectDisconnectCB} from './index.platform'
+import logger from '@/logger'
 import {engineStart, engineReset, getNativeEmitter} from 'react-native-kb'
-
-const RNEmitter = getNativeEmitter()
 
 class NativeTransport extends TransportShared {
   constructor(
-    incomingRPCCallback: incomingRPCCallbackType,
-    connectCallback?: connectDisconnectCB,
-    disconnectCallback?: connectDisconnectCB
+    incomingRPCCallback: IncomingRPCCallbackType,
+    connectCallback?: ConnectDisconnectCB,
+    disconnectCallback?: ConnectDisconnectCB
   ) {
     super({}, connectCallback, disconnectCallback, incomingRPCCallback)
 
@@ -19,7 +17,7 @@ class NativeTransport extends TransportShared {
   }
 
   // We're always connected, so call the callback
-  connect(cb: (err?: any) => void) {
+  connect(cb: (err?: unknown) => void) {
     cb()
   }
   is_connected() {
@@ -34,7 +32,7 @@ class NativeTransport extends TransportShared {
   }
 
   // A custom send override to write to the react native bridge
-  send(msg: SendArg) {
+  send(msg: unknown) {
     const packed = encode(msg)
     const len = encode(packed.length)
     const buf = new Uint8Array(len.length + packed.length)
@@ -42,7 +40,10 @@ class NativeTransport extends TransportShared {
     buf.set(packed, len.length)
     // Pass data over to the native side to be handled, with JSI!
     try {
-      global.rpcOnGo(buf.buffer)
+      if (!global.rpcOnGo) {
+        logger.error('>>>> rpcOnGo send before rpcOnGo global?')
+      }
+      global.rpcOnGo?.(buf.buffer)
     } catch (e) {
       logger.error('>>>> rpcOnGo JS thrown!', e)
     }
@@ -51,15 +52,15 @@ class NativeTransport extends TransportShared {
 }
 
 function createClient(
-  incomingRPCCallback: incomingRPCCallbackType,
-  connectCallback: connectDisconnectCB,
-  disconnectCallback: connectDisconnectCB
+  incomingRPCCallback: IncomingRPCCallbackType,
+  connectCallback: ConnectDisconnectCB,
+  disconnectCallback: ConnectDisconnectCB
 ) {
   const client = sharedCreateClient(
     new NativeTransport(incomingRPCCallback, connectCallback, disconnectCallback)
   )
 
-  global.rpcOnJs = objs => {
+  global.rpcOnJs = (objs: unknown) => {
     try {
       client.transport._dispatch(objs)
     } catch (e) {
@@ -69,6 +70,7 @@ function createClient(
 
   engineStart()
 
+  const RNEmitter = getNativeEmitter()
   RNEmitter.addListener('kb-meta-engine-event', (payload: string) => {
     try {
       switch (payload) {
@@ -79,7 +81,6 @@ function createClient(
       logger.error('>>>> meta engine event JS thrown!', e)
     }
   })
-
   return client
 }
 

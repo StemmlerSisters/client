@@ -4,14 +4,16 @@ import {useIsFocused, useNavigationState} from '@react-navigation/core'
 
 // keep track of this even on unmount, else if you background / foreground you'll lose it
 let _everFocused = false
-const DeferedInner = () => {
+
+const Deferred = React.memo(function Deferred() {
   const isFocused = useIsFocused()
   const navKey = useNavigationState(state => state.key)
   _everFocused = _everFocused || isFocused
   return _everFocused ? <Inbox navKey={navKey} /> : null
+})
+
+const DeferredOuter = () => {
+  return <Deferred />
 }
 
-const Deferred = React.memo(DeferedInner, () => true)
-
-export default Deferred
-export {getOptions} from './container'
+export default DeferredOuter

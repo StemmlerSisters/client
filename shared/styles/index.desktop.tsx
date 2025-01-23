@@ -4,12 +4,12 @@ import styleSheetCreateProxy from './style-sheet-proxy'
 import type * as CSS from './css'
 import {isDarkMode} from './dark-mode'
 import {themed, colors, darkColors} from './colors'
-import {getAssetPath} from '../constants/platform.desktop'
-import * as Path from '../util/path'
+import {getAssetPath} from '@/constants/platform.desktop'
+import * as Path from '@/util/path'
 import isArray from 'lodash/isArray'
 import shallowEqual from 'shallowequal'
 
-type _Elem = Object | null | false | void
+type _Elem = Object | null | false
 // CollapsibleStyle is a generic version of ?StylesMobile and family,
 // slightly extended to support "isFoo && myStyle".
 type CollapsibleStyle = _Elem | ReadonlyArray<_Elem>
@@ -57,7 +57,6 @@ const font = {
 
 const util = {
   ...Shared.util,
-  fastBackground: {backgroundColor: colors.transparent},
   largeWidthPercent: '70%',
   loadingTextStyle: {
     // this won't really work with dark mode
@@ -104,21 +103,14 @@ export const transitionColor = () => ({
   transition: 'background 0.2s linear',
 })
 
-export const backgroundURL = (...to: Array<string>) => {
-  const goodPath = [...to]
-
-  if (goodPath && goodPath.length) {
-    const last = goodPath[goodPath.length - 1]
-    const ext = Path.extname(last)
-    goodPath[goodPath.length - 1] = Path.basename(last, ext)
-    const guiModePath = `${isDarkMode() ? 'dark-' : ''}${goodPath}`
-    const images = [1, 2, 3].map(
-      mult => `url('${getAssetPath('images', guiModePath)}${mult === 1 ? '' : `@${mult}x`}${ext}') ${mult}x`
-    )
-    return `-webkit-image-set(${images.join(', ')})`
-  }
-
-  return ''
+export const backgroundURL = (url: string) => {
+  const ext = Path.extname(url)
+  const goodPath = Path.basename(url, ext) ?? ''
+  const guiModePath = `${isDarkMode() ? 'dark-' : ''}${goodPath}`
+  const images = [1, 2, 3].map(
+    mult => `url('${getAssetPath('images', guiModePath)}${mult === 1 ? '' : `@${mult}x`}${ext}') ${mult}x`
+  )
+  return `-webkit-image-set(${images.join(', ')})`
 }
 
 const fixScrollbars = () => {
@@ -134,8 +126,7 @@ const fixScrollbars = () => {
 
   // Measure the child element, if it is not
   // 30px wide the scrollbars are obtrusive.
-  // @ts-ignore
-  const scrollbarWidth = 30 - parent.firstChild.clientWidth
+  const scrollbarWidth = 30 - (parent.firstChild as HTMLDivElement).clientWidth
   if (scrollbarWidth) {
     document.body.classList.add('layout-scrollbar-obtrusive')
   }
@@ -145,12 +136,7 @@ const fixScrollbars = () => {
 
 export const initDesktopStyles = () => {
   const head = document.head
-  if (!head) {
-    console.error('initDesktopStyles failed')
-    return
-  }
   const style = document.createElement('style')
-  style.type = 'text/css'
   const colorNames = Object.keys(colors) as Array<keyof typeof colors>
   const colorVars = `
         :root { ${colorNames
@@ -171,10 +157,10 @@ export const initDesktopStyles = () => {
       s +
       `.color_${name} {color: var(--color-${name});}\n` +
       `.color_${name}_important {color: var(--color-${name}) !important;}\n` +
-      `.hover_color_${name}:hover {color: var(--color-${name});}\n` +
-      `.hover_container:hover .hover_contained_color_${name} {color: var(--color-${name}) !important;}\n` +
+      `.hover_color_${name}:hover:not(.spoiler .hover_color_${name}) {color: var(--color-${name});}\n` +
+      `.hover_container:hover .hover_contained_color_${name}:not(.spoiler .hover_contained_color_${name}) {color: var(--color-${name}) !important;}\n` +
       `.background_color_${name} {background-color: var(--color-${name});}\n` +
-      `.hover_background_color_${name}:hover {background-color: var(--color-${name});}\n`
+      `.hover_background_color_${name}:hover:not(.spoiler .hover_background_color_${name}) {background-color: var(--color-${name});}\n`
     )
   }, '')
   const css = colorVars + helpers
@@ -184,7 +170,11 @@ export const initDesktopStyles = () => {
 }
 
 export const hairlineWidth = 1
-export const styleSheetCreate = (obj: any) => styleSheetCreateProxy(obj, o => o)
+
+type NamedStyles = {[key: string]: CSS._StylesCrossPlatform}
+export function styleSheetCreate<O extends NamedStyles>(styles: () => O) {
+  return styleSheetCreateProxy(styles, o => o)
+}
 
 export const useCollapseStyles = (
   styles: CSS.StylesCrossPlatform,
@@ -226,7 +216,9 @@ export const useCollapseStyles = (
   old.current = ret
   return ret
 }
-export const collapseStyles = (styles: ReadonlyArray<CollapsibleStyle>): Object | undefined => {
+
+export const useCollapseStylesDesktop = useCollapseStyles
+export const collapseStyles = (styles: ReadonlyArray<CollapsibleStyle>): object | undefined => {
   // fast path for a single style that passes. Often we do stuff like
   // collapseStyle([styles.myStyle, this.props.something && {backgroundColor: 'red'}]), so in the false
   // case we can just take styles.myStyle and not render thrash
@@ -234,7 +226,7 @@ export const collapseStyles = (styles: ReadonlyArray<CollapsibleStyle>): Object 
     return !!s && Object.keys(s).length
   })
   if (valid.length === 0) {
-    return undefined as any
+    return undefined
   }
   if (valid.length === 1) {
     const s = valid[0]
@@ -244,28 +236,14 @@ export const collapseStyles = (styles: ReadonlyArray<CollapsibleStyle>): Object 
   }
 
   // jenkins doesn't support flat yet
-  let s: Object
-  if (__STORYSHOT__) {
-    const flat = styles.reduce((a: Array<CollapsibleStyle>, e: CollapsibleStyle) => a.concat(e), []) as Array<
-      Object | null | false
-    >
-    s = Object.assign({}, ...flat)
-  } else {
-    s = Object.assign({}, ...styles.flat())
-  }
+  const s = Object.assign({}, ...styles.flat()) as Object
   return Object.keys(s).length ? s : undefined
 }
-export {isMobile, isPhone, isTablet, fileUIName, isIPhoneX, isIOS, isAndroid} from '../constants/platform'
-export {
-  globalMargins,
-  backgroundModeToColor,
-  backgroundModeToTextColor,
-  platformStyles,
-  padding,
-} from './shared'
+export const collapseStylesDesktop = collapseStyles
+export {isMobile, isPhone, isTablet, fileUIName, isIOS, isAndroid} from '@/constants/platform'
+export * from './shared'
 
 export {themed as globalColors} from './colors'
-export const statusBarHeight = 0
 export const borderRadius = 4
 export {default as classNames} from 'classnames'
 export type StylesCrossPlatform = CSS.StylesCrossPlatform
@@ -276,4 +254,17 @@ export const headerExtraHeight = 0
 export const CanFixOverdrawContext = React.createContext(false)
 export const dontFixOverdraw = {canFixOverdraw: false}
 export const yesFixOverdraw = {canFixOverdraw: true}
-export const undynamicColor = (col: any) => col
+export const undynamicColor = (col: string) => col
+// nothing on desktop, it all works
+export const normalizePath = (p: string) => p
+export const unnormalizePath = (p: string) => p
+export const urlEscapeFilePath = (path: string) => {
+  if (path.startsWith('file://')) {
+    const parts = path.split('/')
+    parts[parts.length - 1] = encodeURIComponent(parts[parts.length - 1]!)
+    return parts.join('/')
+  }
+  return path
+}
+export const castStyleDesktop = (style: CollapsibleStyle) => style
+export const castStyleNative = (style: CollapsibleStyle) => style

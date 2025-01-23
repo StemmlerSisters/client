@@ -4,7 +4,7 @@ import {Animated} from 'react-native'
 type SentProps = {
   children: React.ReactNode
 }
-export const Sent = function Sent(p: SentProps) {
+export const Sent = React.memo(function Sent(p: SentProps) {
   const {children} = p
   const [done, setDone] = React.useState(false)
   const translateY = React.useRef(new Animated.Value(999)).current
@@ -19,7 +19,7 @@ export const Sent = function Sent(p: SentProps) {
   return (
     <Animated.View
       style={{opacity, overflow: 'hidden', transform: [{translateY}], width: '100%'}}
-      onLayout={(e: any) => {
+      onLayout={e => {
         if (onceRef.current) {
           return
         }
@@ -45,4 +45,4 @@ export const Sent = function Sent(p: SentProps) {
       {children}
     </Animated.View>
   )
-}
+})

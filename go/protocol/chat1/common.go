@@ -130,6 +130,12 @@ func (o FlipGameID) DeepCopy() FlipGameID {
 	})(o)
 }
 
+type ArchiveJobID string
+
+func (o ArchiveJobID) DeepCopy() ArchiveJobID {
+	return o
+}
+
 type InboxVersInfo struct {
 	Uid  gregor1.UID `codec:"uid" json:"uid"`
 	Vers InboxVers   `codec:"vers" json:"vers"`
@@ -392,6 +398,7 @@ const (
 	GlobalAppNotificationSetting_PLAINTEXTDESKTOP   GlobalAppNotificationSetting = 2
 	GlobalAppNotificationSetting_DEFAULTSOUNDMOBILE GlobalAppNotificationSetting = 3
 	GlobalAppNotificationSetting_DISABLETYPING      GlobalAppNotificationSetting = 4
+	GlobalAppNotificationSetting_CONVERTHEIC        GlobalAppNotificationSetting = 5
 )
 
 func (o GlobalAppNotificationSetting) DeepCopy() GlobalAppNotificationSetting { return o }
@@ -402,6 +409,7 @@ var GlobalAppNotificationSettingMap = map[string]GlobalAppNotificationSetting{
 	"PLAINTEXTDESKTOP":   2,
 	"DEFAULTSOUNDMOBILE": 3,
 	"DISABLETYPING":      4,
+	"CONVERTHEIC":        5,
 }
 
 var GlobalAppNotificationSettingRevMap = map[GlobalAppNotificationSetting]string{
@@ -410,6 +418,7 @@ var GlobalAppNotificationSettingRevMap = map[GlobalAppNotificationSetting]string
 	2: "PLAINTEXTDESKTOP",
 	3: "DEFAULTSOUNDMOBILE",
 	4: "DISABLETYPING",
+	5: "CONVERTHEIC",
 }
 
 func (e GlobalAppNotificationSetting) String() string {
@@ -2007,6 +2016,7 @@ const (
 	GetThreadReason_EMOJISOURCE        GetThreadReason = 11
 	GetThreadReason_FORWARDMSG         GetThreadReason = 12
 	GetThreadReason_LOCALIZE           GetThreadReason = 13
+	GetThreadReason_ARCHIVE            GetThreadReason = 14
 )
 
 func (o GetThreadReason) DeepCopy() GetThreadReason { return o }
@@ -2026,6 +2036,7 @@ var GetThreadReasonMap = map[string]GetThreadReason{
 	"EMOJISOURCE":        11,
 	"FORWARDMSG":         12,
 	"LOCALIZE":           13,
+	"ARCHIVE":            14,
 }
 
 var GetThreadReasonRevMap = map[GetThreadReason]string{
@@ -2043,6 +2054,7 @@ var GetThreadReasonRevMap = map[GetThreadReason]string{
 	11: "EMOJISOURCE",
 	12: "FORWARDMSG",
 	13: "LOCALIZE",
+	14: "ARCHIVE",
 }
 
 func (e GetThreadReason) String() string {

@@ -1,7 +1,6 @@
 // Cache in the module. This can get called from multiple places and env vars can get lost
 const skipAnimation = require('./common-adapters/skip-animations')
-// why did you render
-const enableWDYR = false
+const enableWDYR = require('./util/why-did-you-render-enabled')
 
 let isElectron = null
 let isReactNative = null
@@ -39,29 +38,12 @@ module.exports = function (api /*: any */) {
     throw new Error('Packager is confused about babel platform')
   }
 
+  // this is used just for our node side but not any bundling
   if (isElectron) {
     // console.error('KB babel.config.js for Electron')
     return {
-      plugins: [
-        '@babel/plugin-proposal-optional-catch-binding',
-        '@babel/plugin-proposal-nullish-coalescing-operator',
-        '@babel/plugin-proposal-optional-chaining',
-        '@babel/plugin-proposal-object-rest-spread',
-        '@babel/plugin-proposal-class-properties',
-        'react-native-web',
-      ],
       presets: [
         isTest ? ['@babel/preset-env', {targets: {node: 'current'}}] : '@babel/preset-env',
-        [
-          '@babel/preset-react',
-          isDev
-            ? {
-                runtime: 'automatic',
-                development: true,
-                ...(enableWDYR ? {importSource: '@welldone-software/why-did-you-render'} : {}),
-              }
-            : {},
-        ],
         '@babel/preset-typescript',
       ],
     }
@@ -69,8 +51,19 @@ module.exports = function (api /*: any */) {
     // console.error('KB babel.config.js for ReactNative')
     return {
       plugins: [
+        [
+          'module-resolver',
+          {
+            alias: {
+              '@': './',
+              'react-native-kb': '../rnmodules/react-native-kb',
+              'react-native-drop-view': '../rnmodules/react-native-drop-view',
+            },
+          },
+        ],
         ...(skipAnimation ? [] : ['react-native-reanimated/plugin']),
         '@babel/plugin-proposal-numeric-separator',
+        '@babel/plugin-transform-export-namespace-from',
         isDev
           ? [
               '@babel/plugin-transform-react-jsx-development',
@@ -85,6 +78,7 @@ module.exports = function (api /*: any */) {
         // lets us set our own jsx above
         ['module:metro-react-native-babel-preset', {useTransformReactJSXExperimental: true}],
       ],
+      sourceMaps: true,
     }
   }
 }

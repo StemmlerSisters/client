@@ -4,44 +4,38 @@ import lottie from 'lottie-web'
 import type {Props, AnimationType} from './animation'
 
 const defaultDimension = 16
-const _typeToData = new Map<AnimationType, unknown>()
-
-const useAnimationData = (type: AnimationType) => {
-  const existing = _typeToData.get(type)
-  if (existing) {
-    return existing
-  }
-  const animationData = require('./animation-data.json')
-
-  const options = animationData[type]
-  _typeToData.set(type, options)
-  return options
-}
 
 const Animation = React.memo(function Animation(props: Props) {
   const {style, width, height, animationType} = props
-  const element = React.useRef<HTMLDivElement>(null)
-  const lottieInstance = React.useRef<any>()
-  const animationData = useAnimationData(animationType)
+  const elementRef = React.useRef<HTMLDivElement>(null)
+  const lottieInstance = React.useRef<null | ReturnType<typeof lottie.loadAnimation>>(null)
+
+  const data = React.useRef(require('./animation-data.json') as {[key in AnimationType]: unknown})
   React.useEffect(() => {
-    if (element.current) {
+    if (elementRef.current) {
+      const animationData = data.current[animationType]
       lottieInstance.current?.destroy()
       lottieInstance.current = lottie.loadAnimation({
         animationData,
-        container: element.current,
+        container: elementRef.current,
       })
     }
     return () => {
       lottieInstance.current?.destroy()
       lottieInstance.current = null
     }
-  }, [animationData])
+  }, [animationType])
   return (
     <Box className={props.className} style={props.containerStyle}>
       <div
-        // @ts-ignore
-        style={{height: height ?? defaultDimension, width: width ?? defaultDimension, ...style}}
-        ref={element}
+        style={
+          {
+            height: height ?? defaultDimension,
+            width: width ?? defaultDimension,
+            ...style,
+          } as React.CSSProperties
+        }
+        ref={elementRef}
       />
     </Box>
   )

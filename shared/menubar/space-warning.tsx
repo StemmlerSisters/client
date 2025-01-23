@@ -1,19 +1,21 @@
-import * as Kb from '../common-adapters'
-import type * as FsTypes from '../constants/types/fs'
+import * as Kb from '@/common-adapters'
+import * as T from '@/constants/types'
 
 type Props = {
   hidden: boolean
   onClose: () => void
   onRetry: () => void
-  diskSpaceStatus: FsTypes.DiskSpaceStatus
+  diskSpaceStatus: T.FS.DiskSpaceStatus
 }
 
 const SpaceWarning = (props: Props) => {
-  const display = props.diskSpaceStatus === 'error' || (props.diskSpaceStatus === 'warning' && !props.hidden)
-  const color = props.diskSpaceStatus === 'warning' ? 'blue' : 'red'
+  const display =
+    props.diskSpaceStatus === T.FS.DiskSpaceStatus.Error ||
+    (props.diskSpaceStatus === T.FS.DiskSpaceStatus.Warning && !props.hidden)
+  const color = props.diskSpaceStatus === T.FS.DiskSpaceStatus.Warning ? 'blue' : 'red'
   return display ? (
     <Kb.Banner
-      {...(props.diskSpaceStatus === 'warning' ? {onClose: props.onClose} : {})}
+      {...(props.diskSpaceStatus === T.FS.DiskSpaceStatus.Warning ? {onClose: props.onClose} : {})}
       color={color}
       narrow={true}
       style={{minHeight: 50}}
@@ -21,10 +23,10 @@ const SpaceWarning = (props: Props) => {
       <Kb.BannerParagraph
         bannerColor={color}
         content={[
-          props.diskSpaceStatus === 'warning'
+          props.diskSpaceStatus === T.FS.DiskSpaceStatus.Warning
             ? 'You have less than 1 GB of storage space. Make some space, or unsync some folders. '
             : 'You are out of storage space. Unsync some folders, or make some space then ',
-          !!props.onRetry && {onClick: props.onRetry, text: 'retry the sync'},
+          {onClick: props.onRetry, text: 'retry the sync'},
           '.',
         ]}
       />

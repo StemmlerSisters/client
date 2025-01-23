@@ -1,115 +1,75 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Constants from '../../../constants/chat2'
-import * as Chat2Gen from '../../../actions/chat2-gen'
-import * as Tracker2Gen from '../../../actions/tracker2-gen'
-import * as RouteTreeGen from '../../../actions/route-tree-gen'
-import * as Container from '../../../util/container'
 import Normal from '.'
-import type * as Types from '../../../constants/types/chat2'
-import {indefiniteArticle} from '../../../util/string'
-import shallowEqual from 'shallowequal'
+import type * as T from '@/constants/types'
+import {FocusProvider, ScrollProvider} from './context'
+import {OrangeLineContext} from '../orange-line-context'
 
-type Props = {conversationIDKey: Types.ConversationIDKey}
+// Orange line logic:
+// When we load a conversation with a non scrolling scrollDirection we'll load the orange line through the rpc.
+// While the meta has readMsgID and maxMsgID those values do not update correctly in time to use.
+// On mobile when we background we'll clear the orange line and we'll get it when we foreground (as a side effect of being stale).
+// On desktop when you become inactive we'll watch for a new message and in that case we'll load the orange line once.
+// If we call mark as unread we'll just manually set the value if the rpc succeeds, as calling the rpc does not update immediately.
 
-const NormalWrapper = React.memo(function NormalWrapper(props: Props) {
-  const {conversationIDKey} = props
-  const [focusInputCounter, setFocusInputCounter] = React.useState(0)
-  const onFocusInput = React.useCallback(() => {
-    setFocusInputCounter(focusInputCounter + 1)
-  }, [setFocusInputCounter, focusInputCounter])
+const useOrangeLine = () => {
+  // this hook only deals with the active changes, otherwise the rest of the logic is in the store
+  const loadOrangeLine = C.useChatContext(s => s.dispatch.loadOrangeLine)
+  const clearOrangeLine = C.useChatContext(s => s.dispatch.clearOrangeLine)
+  const maxVisibleMsgID = C.useChatContext(s => s.meta.maxVisibleMsgID)
+  const lastVisibleMsgIDRef = React.useRef(maxVisibleMsgID)
+  const newMessageVisible = maxVisibleMsgID !== lastVisibleMsgIDRef.current
+  lastVisibleMsgIDRef.current = maxVisibleMsgID
+  const active = C.useActiveState(s => s.active)
+  const gotMessageWhileInactive = React.useRef(false)
+  if (active) {
+    gotMessageWhileInactive.current = false
+  }
+  if (!gotMessageWhileInactive.current && !active && newMessageVisible) {
+    gotMessageWhileInactive.current = true
+    loadOrangeLine('new message while inactive')
+  }
 
-  const requestScrollDownRef = React.useRef<undefined | (() => void)>()
-  const onRequestScrollDown = React.useCallback(() => {
-    requestScrollDownRef.current?.()
-  }, [])
-
-  const requestScrollUpRef = React.useRef<undefined | (() => void)>()
-  const onRequestScrollUp = React.useCallback(() => {
-    requestScrollUpRef.current?.()
-  }, [])
-
-  const requestScrollToBottomRef = React.useRef<undefined | (() => void)>()
-  const onRequestScrollToBottom = React.useCallback(() => {
-    requestScrollToBottomRef.current?.()
-  }, [])
-
-  const {cannotWrite, minWriterReason, showThreadSearch, threadLoadedOffline} = Container.useSelector(
-    state => {
-      const meta = Constants.getMeta(state, conversationIDKey)
-      const {cannotWrite, offline, minWriterRole} = meta
-      const threadLoadedOffline = offline
-      const showThreadSearch = Constants.getThreadSearchInfo(state, conversationIDKey).visible
-      const minWriterReason = `You must be at least ${indefiniteArticle(
-        minWriterRole
-      )} ${minWriterRole} to post.`
-      return {cannotWrite, minWriterReason, showThreadSearch, threadLoadedOffline}
-    },
-    shallowEqual
-  )
-
-  const dragAndDropRejectReason = cannotWrite ? minWriterReason : undefined
-
-  React.useEffect(() => {
-    if (!Container.isMobile) {
-      setFocusInputCounter(c => c + 1)
+  const mobileAppState = C.useConfigState(s => s.mobileAppState)
+  const lastMobileAppStateRef = React.useRef(mobileAppState)
+  if (mobileAppState !== lastMobileAppStateRef.current) {
+    lastMobileAppStateRef.current = mobileAppState
+    if (mobileAppState !== 'active') {
+      clearOrangeLine('mobile backgrounded')
     }
-  }, [conversationIDKey])
+  }
 
-  const dispatch = Container.useDispatch()
-  const jumpToRecent = React.useCallback(() => {
-    dispatch(Chat2Gen.createJumpToRecent({conversationIDKey}))
-  }, [conversationIDKey, dispatch])
+  const storeOrangeLine = C.useChatContext(s => s.orangeAboveOrdinal)
+  const orangeLineRef = React.useRef(storeOrangeLine)
+  // we can't load this again due to stale and other things so lets just keep its state while we're mounted
+  // and never move forward unless its totally gone
+  // move if we moved back due to mark as unread
+  if (storeOrangeLine) {
+    if (!orangeLineRef.current || orangeLineRef.current > storeOrangeLine) {
+      orangeLineRef.current = storeOrangeLine
+    }
+  } else {
+    // allow a clear
+    orangeLineRef.current = storeOrangeLine
+  }
 
-  const onPaste = React.useCallback(
-    (data: Buffer) => {
-      dispatch(Chat2Gen.createAttachmentPasted({conversationIDKey, data}))
-    },
-    [conversationIDKey, dispatch]
-  )
+  return orangeLineRef.current
+}
 
-  const onToggleThreadSearch = React.useCallback(() => {
-    dispatch(Chat2Gen.createToggleThreadSearch({conversationIDKey}))
-  }, [conversationIDKey, dispatch])
-
-  const onShowTracker = React.useCallback(
-    (username: string) => {
-      dispatch(Tracker2Gen.createShowUser({asTracker: true, username}))
-    },
-    [dispatch]
-  )
-
-  const onAttach = React.useCallback(
-    (paths: Array<string>) => {
-      const pathAndOutboxIDs = paths.map(p => ({outboxID: null, path: p}))
-      dispatch(
-        RouteTreeGen.createNavigateAppend({
-          path: [{props: {conversationIDKey, pathAndOutboxIDs}, selected: 'chatAttachmentGetTitles'}],
-        })
-      )
-    },
-    [conversationIDKey, dispatch]
-  )
-
+const WithOrange = React.memo(function WithOrange(p: {orangeLine: T.Chat.Ordinal}) {
   return (
-    <Normal
-      conversationIDKey={conversationIDKey}
-      dragAndDropRejectReason={dragAndDropRejectReason}
-      threadLoadedOffline={threadLoadedOffline}
-      showThreadSearch={showThreadSearch}
-      onFocusInput={onFocusInput}
-      onRequestScrollDown={onRequestScrollDown}
-      onRequestScrollUp={onRequestScrollUp}
-      onRequestScrollToBottom={onRequestScrollToBottom}
-      requestScrollToBottomRef={requestScrollToBottomRef}
-      focusInputCounter={focusInputCounter}
-      requestScrollDownRef={requestScrollDownRef}
-      requestScrollUpRef={requestScrollUpRef}
-      jumpToRecent={jumpToRecent}
-      onPaste={onPaste}
-      onToggleThreadSearch={onToggleThreadSearch}
-      onShowTracker={onShowTracker}
-      onAttach={cannotWrite ? null : onAttach}
-    />
+    <OrangeLineContext.Provider value={p.orangeLine}>
+      <FocusProvider>
+        <ScrollProvider>
+          <Normal />
+        </ScrollProvider>
+      </FocusProvider>
+    </OrangeLineContext.Provider>
   )
+})
+
+const NormalWrapper = React.memo(function NormalWrapper() {
+  const orangeLine = useOrangeLine()
+  return <WithOrange orangeLine={orangeLine} />
 })
 export default NormalWrapper

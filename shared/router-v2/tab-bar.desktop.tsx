@@ -1,64 +1,49 @@
+import * as C from '@/constants'
 import './tab-bar.css'
-import * as ConfigGen from '../actions/config-gen'
-import * as LoginGen from '../actions/login-gen'
-import * as Container from '../util/container'
-import * as FsConstants from '../constants/fs'
-import * as Kb from '../common-adapters'
-import * as Kbfs from '../fs/common'
-import * as Platforms from '../constants/platform'
-import * as ProfileGen from '../actions/profile-gen'
-import * as ProvisionGen from '../actions/provision-gen'
-import * as RPCTypes from '../constants/types/rpc-gen'
+import * as Kb from '@/common-adapters'
+import * as Kbfs from '@/fs/common'
+import * as Platforms from '@/constants/platform'
+import * as T from '@/constants/types'
 import * as React from 'react'
-import * as RouteTreeGen from '../actions/route-tree-gen'
-import * as SettingsConstants from '../constants/settings'
-import * as SettingsGen from '../actions/settings-gen'
-import * as Styles from '../styles'
-import * as Tabs from '../constants/tabs'
+import * as Tabs from '@/constants/tabs'
 import * as Common from './common.desktop'
-import * as TrackerConstants from '../constants/tracker2'
+import * as TrackerConstants from '@/constants/tracker2'
 import AccountSwitcher from './account-switcher/container'
 import RuntimeStats from '../app/runtime-stats'
-import HiddenString from '../util/hidden-string'
-import openURL from '../util/open-url'
-import {isLinux} from '../constants/platform'
-import KB2 from '../util/electron.desktop'
+import openURL from '@/util/open-url'
+import {isLinux} from '@/constants/platform'
+import KB2 from '@/util/electron.desktop'
 
 const {hideWindow, ctlQuit} = KB2.functions
 
 export type Props = {
-  navigation: any
-  state: any
+  navigation: C.Router2.Navigator
+  state: C.Router2.NavState
 }
 
 const FilesTabBadge = () => {
-  const uploadIcon = FsConstants.getUploadIconForFilesTab(Container.useSelector(state => state.fs.badge))
+  const uploadIcon = C.useFSState(s => s.getUploadIconForFilesTab())
   return uploadIcon ? <Kbfs.UploadIcon uploadIcon={uploadIcon} style={styles.badgeIconUpload} /> : null
 }
 
 const Header = () => {
-  const dispatch = Container.useDispatch()
-  const [showingMenu, setShowingMenu] = React.useState(false)
-  const attachmentRef = React.useRef<Kb.Box2>(null)
-  const getAttachmentRef = () => attachmentRef.current
-  const fullname = Container.useSelector(
-    state => TrackerConstants.getDetails(state, state.config.username).fullname || ''
-  )
-  const username = Container.useSelector(state => state.config.username)
-  const onProfileClick = () => dispatch(ProfileGen.createShowUserProfile({username}))
-  const onClickWrapper = () => {
-    setShowingMenu(false)
-    onProfileClick()
-  }
+  const username = C.useCurrentUserState(s => s.username)
+  const fullname = C.useTrackerState(s => TrackerConstants.getDetails(s, username).fullname || '')
+  const showUserProfile = C.useProfileState(s => s.dispatch.showUserProfile)
 
-  const onAddAccount = () => dispatch(ProvisionGen.createStartProvision())
-  const onHelp = () => openURL('https://book.keybase.io')
-  const onQuit = () => {
+  const startProvision = C.useProvisionState(s => s.dispatch.startProvision)
+  const stop = C.useSettingsState(s => s.dispatch.stop)
+  const onAddAccount = React.useCallback(() => {
+    startProvision()
+  }, [startProvision])
+  const onHelp = React.useCallback(() => openURL('https://book.keybase.io'), [])
+  const dumpLogs = C.useConfigState(s => s.dispatch.dumpLogs)
+  const onQuit = React.useCallback(() => {
     if (!__DEV__) {
       if (isLinux) {
-        dispatch(SettingsGen.createStop({exitCode: RPCTypes.ExitCode.ok}))
+        stop(T.RPCGen.ExitCode.ok)
       } else {
-        dispatch(ConfigGen.createDumpLogs({reason: 'quitting through menu'}))
+        C.ignorePromise(dumpLogs('quitting through menu'))
       }
     }
     // In case dump log doesn't exit for us
@@ -66,57 +51,85 @@ const Header = () => {
     setTimeout(() => {
       ctlQuit?.()
     }, 2000)
-  }
-  const onSettings = () => dispatch(RouteTreeGen.createSwitchTab({tab: Tabs.settingsTab}))
-  const onSignOut = () => dispatch(RouteTreeGen.createNavigateAppend({path: [SettingsConstants.logOutTab]}))
+  }, [dumpLogs, stop])
 
-  const menuHeader = () => (
-    <Kb.Box2 direction="vertical" fullWidth={true}>
-      <Kb.ClickableBox onClick={onClickWrapper} style={styles.headerBox}>
-        <Kb.ConnectedNameWithIcon
-          username={username}
-          onClick={onClickWrapper}
-          metaTwo={
-            <Kb.Text type="BodySmall" lineClamp={1} style={styles.fullname}>
-              {fullname}
-            </Kb.Text>
-          }
+  const switchTab = C.useRouterState(s => s.dispatch.switchTab)
+  const onSettings = React.useCallback(() => switchTab(Tabs.settingsTab), [switchTab])
+  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
+  const onSignOut = React.useCallback(() => navigateAppend(C.Settings.settingsLogOutTab), [navigateAppend])
+
+  const makePopup = React.useCallback(
+    (p: Kb.Popup2Parms) => {
+      const {attachTo, hidePopup} = p
+      const menuItems: Kb.MenuItems = [
+        {onClick: onAddAccount, title: 'Log in as another user'},
+        {onClick: onSettings, title: 'Settings'},
+        {onClick: onHelp, title: 'Help'},
+        {danger: true, onClick: onSignOut, title: 'Sign out'},
+        {danger: true, onClick: onQuit, title: 'Quit Keybase'},
+      ]
+
+      const onClickWrapper = () => {
+        hidePopup()
+        showUserProfile(username)
+      }
+
+      const menuHeader = (
+        <Kb.Box2 direction="vertical" fullWidth={true}>
+          <Kb.ClickableBox onClick={onClickWrapper} style={styles.headerBox}>
+            <Kb.ConnectedNameWithIcon
+              username={username}
+              onClick={onClickWrapper}
+              metaTwo={
+                <Kb.Text type="BodySmall" lineClamp={1} style={styles.fullname}>
+                  {fullname}
+                </Kb.Text>
+              }
+            />
+          </Kb.ClickableBox>
+          <Kb.Button
+            label="View/Edit profile"
+            mode="Secondary"
+            onClick={onClickWrapper}
+            small={true}
+            style={styles.button}
+          />
+          <AccountSwitcher />
+        </Kb.Box2>
+      )
+
+      return (
+        <Kb.FloatingMenu
+          position="bottom left"
+          containerStyle={styles.menu}
+          header={menuHeader}
+          closeOnSelect={true}
+          visible={true}
+          attachTo={attachTo}
+          items={menuItems}
+          onHidden={hidePopup}
         />
-      </Kb.ClickableBox>
-      <Kb.Button
-        label="View/Edit profile"
-        mode="Secondary"
-        onClick={onClickWrapper}
-        small={true}
-        style={styles.button}
-      />
-      <AccountSwitcher />
-    </Kb.Box2>
+      )
+    },
+    [fullname, onAddAccount, onHelp, onQuit, onSettings, onSignOut, username, showUserProfile]
   )
-
-  const menuItems = (): Kb.MenuItems => [
-    {onClick: onAddAccount, title: 'Log in as another user'},
-    {onClick: onSettings, title: 'Settings'},
-    {onClick: onHelp, title: 'Help'},
-    {danger: true, onClick: onSignOut, title: 'Sign out'},
-    {danger: true, onClick: onQuit, title: 'Quit Keybase'},
-  ]
+  const {togglePopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
 
   return (
     <>
-      <Kb.ClickableBox onClick={() => setShowingMenu(true)}>
-        <Kb.Box2
+      <Kb.ClickableBox onClick={togglePopup}>
+        <Kb.Box2Measure
           direction="horizontal"
           gap="tiny"
           centerChildren={true}
           fullWidth={true}
           style={styles.nameContainer}
           alignItems="center"
-          ref={attachmentRef}
+          ref={popupAnchor}
         >
           <Kb.Avatar
             size={24}
-            borderColor={Styles.globalColors.blue}
+            borderColor={Kb.Styles.globalColors.blue}
             username={username}
             style={styles.avatar}
           />
@@ -126,58 +139,56 @@ const Header = () => {
             </Kb.Text>
             <Kb.Icon
               type="iconfont-arrow-down"
-              color={Styles.globalColors.blueLighter}
+              color={Kb.Styles.globalColors.blueLighter}
               fontSize={12}
               style={styles.caret}
             />
           </>
-        </Kb.Box2>
+        </Kb.Box2Measure>
       </Kb.ClickableBox>
-      <Kb.FloatingMenu
-        position="bottom left"
-        containerStyle={styles.menu}
-        header={menuHeader()}
-        closeOnSelect={true}
-        visible={showingMenu}
-        attachTo={getAttachmentRef}
-        items={menuItems()}
-        onHidden={() => setShowingMenu(false)}
-      />
+      {popup}
     </>
   )
 }
 
-const keysMap = Tabs.desktopTabs.reduce((map, tab, index) => {
-  map[`mod+${index + 1}`] = tab
-  return map
-}, {})
+const keysMap = Tabs.desktopTabs.reduce<{[key: string]: (typeof Tabs.desktopTabs)[number]}>(
+  (map, tab, index) => {
+    map[`mod+${index + 1}`] = tab
+    return map
+  },
+  {}
+)
 const hotKeys = Object.keys(keysMap)
 
 const TabBar = React.memo(function TabBar(props: Props) {
   const {navigation, state} = props
-  const username = Container.useSelector(state => state.config.username)
-
+  const username = C.useCurrentUserState(s => s.username)
   const onHotKey = React.useCallback(
     (cmd: string) => {
-      navigation.navigate(keysMap[cmd])
+      navigation.navigate(keysMap[cmd] as Tabs.Tab)
     },
     [navigation]
   )
 
   const onSelectTab = Common.useSubnavTabAction(navigation, state)
+  const forceSmallNav = C.useConfigState(s => s.forceSmallNav)
 
   return username ? (
-    <Kb.Box2 className="tab-container" direction="vertical" fullHeight={true}>
+    <Kb.Box2
+      className={Kb.Styles.classNames('tab-container', {forceSmallNav})}
+      direction="vertical"
+      fullHeight={true}
+    >
       <Kb.Box2 direction="vertical" style={styles.header} fullWidth={true}>
         <Kb.HotKey hotKeys={hotKeys} onHotKey={onHotKey} />
         <Kb.Box2 direction="horizontal" style={styles.osButtons} fullWidth={true} />
         <Header />
         <Kb.Divider style={styles.divider} />
       </Kb.Box2>
-      {state.routes.map((route, index) => (
+      {state?.routes?.map((route: {key?: string; name?: string}, index: number) => (
         <Tab
           key={route.key}
-          tab={route.name}
+          tab={route.name as Tabs.AppTab}
           index={index}
           isSelected={index === state.index}
           onSelectTab={onSelectTab}
@@ -195,43 +206,43 @@ type TabProps = {
   onSelectTab: (t: Tabs.AppTab) => void
 }
 
-const TabBadge = (p: {name}) => {
+const TabBadge = (p: {name: Tabs.Tab}) => {
   const {name} = p
-  const badgeNumbers = Container.useSelector(state => state.notifications.navBadges)
-  const fsCriticalUpdate = Container.useSelector(state => state.fs.criticalUpdate)
+  const badgeNumbers = C.useNotifState(s => s.navBadges)
+  const fsCriticalUpdate = C.useFSState(s => s.criticalUpdate)
   const badge = (badgeNumbers.get(name) ?? 0) + (name === Tabs.fsTab && fsCriticalUpdate ? 1 : 0)
   return badge ? <Kb.Badge className="tab-badge" badgeNumber={badge} /> : null
 }
 
 const Tab = React.memo(function Tab(props: TabProps) {
   const {tab, index, isSelected, onSelectTab} = props
+  const isPeopleTab = index === 0
   const {label} = Tabs.desktopTabMeta[tab]
-
-  const dispatch = Container.useDispatch()
-
-  const accountRows = Container.useSelector(state => state.config.configuredAccounts)
-  const current = Container.useSelector(state => state.config.username)
+  const current = C.useCurrentUserState(s => s.username)
+  const setUserSwitching = C.useConfigState(s => s.dispatch.setUserSwitching)
+  const login = C.useConfigState(s => s.dispatch.login)
   const onQuickSwitch = React.useMemo(
     () =>
-      index === 0
+      isPeopleTab
         ? () => {
+            const accountRows = C.useConfigState.getState().configuredAccounts
             const row = accountRows.find(a => a.username !== current && a.hasStoredSecret)
             if (row) {
-              dispatch(ConfigGen.createSetUserSwitching({userSwitching: true}))
-              dispatch(LoginGen.createLogin({password: new HiddenString(''), username: row.username}))
+              setUserSwitching(true)
+              login(row.username, '')
             } else {
               onSelectTab(tab)
             }
           }
         : undefined,
-    [accountRows, dispatch, index, current, onSelectTab, tab]
+    [login, isPeopleTab, current, onSelectTab, tab, setUserSwitching]
   )
 
   // no long press on desktop so a quick version
   const [mouseTime, setMouseTime] = React.useState(0)
   const onMouseUp = React.useMemo(
     () =>
-      index === 0
+      isPeopleTab
         ? () => {
             if (mouseTime && Date.now() - mouseTime > 1000) {
               onQuickSwitch?.()
@@ -239,25 +250,25 @@ const Tab = React.memo(function Tab(props: TabProps) {
             setMouseTime(0)
           }
         : undefined,
-    [index, onQuickSwitch, mouseTime]
+    [isPeopleTab, onQuickSwitch, mouseTime]
   )
   const onMouseDown = React.useMemo(
     () =>
-      index === 0
+      isPeopleTab
         ? () => {
             setMouseTime(Date.now())
           }
         : undefined,
-    [index]
+    [isPeopleTab]
   )
   const onMouseLeave = React.useMemo(
     () =>
-      index === 0
+      isPeopleTab
         ? () => {
             setMouseTime(0)
           }
         : undefined,
-    [index]
+    [isPeopleTab]
   )
 
   const onClick = React.useCallback(() => {
@@ -273,32 +284,32 @@ const Tab = React.memo(function Tab(props: TabProps) {
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseLeave}
     >
-      <Kb.WithTooltip
+      <Kb.Box2Measure
+        direction="horizontal"
+        fullWidth={true}
+        className={Kb.Styles.classNames(
+          isSelected ? 'tab-selected' : 'tab',
+          'tab-tooltip',
+          'tooltip-top-right'
+        )}
+        style={styles.tab}
         tooltip={`${label} (${Platforms.shortcutSymbol}${index + 1})`}
-        toastClassName="tab-tooltip"
       >
-        <Kb.Box2
-          direction="horizontal"
-          fullWidth={true}
-          className={isSelected ? 'tab-selected' : 'tab'}
-          style={styles.tab}
-        >
-          <Kb.Box2 className="tab-highlight" direction="vertical" fullHeight={true} />
-          <Kb.Box2 style={styles.iconBox} direction="horizontal">
-            <Kb.Icon className="tab-icon" type={Tabs.desktopTabMeta[tab].icon} sizeType="Big" />
-            {tab === Tabs.fsTab && <FilesTabBadge />}
-          </Kb.Box2>
-          <Kb.Text className="tab-label" type="BodySmallSemibold">
-            {label}
-          </Kb.Text>
-          <TabBadge name={tab} />
+        <Kb.Box2 className="tab-highlight" direction="vertical" fullHeight={true} />
+        <Kb.Box2 style={styles.iconBox} direction="horizontal">
+          <Kb.Icon className="tab-icon" type={Tabs.desktopTabMeta[tab].icon} sizeType="Big" />
+          {tab === Tabs.fsTab && <FilesTabBadge />}
         </Kb.Box2>
-      </Kb.WithTooltip>
+        <Kb.Text className="tab-label" type="BodySmallSemibold">
+          {label}
+        </Kb.Text>
+        <TabBadge name={tab} />
+      </Kb.Box2Measure>
     </Kb.ClickableBox>
   )
 })
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
       avatar: {marginLeft: 14},
@@ -308,31 +319,31 @@ const styles = Styles.styleSheetCreate(
         right: 8,
       },
       badgeIconUpload: {
-        bottom: -Styles.globalMargins.xxtiny,
-        height: Styles.globalMargins.xsmall,
+        bottom: -Kb.Styles.globalMargins.xxtiny,
+        height: Kb.Styles.globalMargins.xsmall,
         position: 'absolute',
-        right: Styles.globalMargins.xsmall,
-        width: Styles.globalMargins.xsmall,
+        right: Kb.Styles.globalMargins.xsmall,
+        width: Kb.Styles.globalMargins.xsmall,
       },
       button: {
-        margin: Styles.globalMargins.xsmall,
+        margin: Kb.Styles.globalMargins.xsmall,
       },
       caret: {marginRight: 12},
-      divider: {marginTop: Styles.globalMargins.tiny},
+      divider: {marginTop: Kb.Styles.globalMargins.tiny},
       fullname: {maxWidth: 180},
       header: {flexShrink: 0, height: 80, marginBottom: 20},
       headerBox: {
-        paddingTop: Styles.globalMargins.small,
+        paddingTop: Kb.Styles.globalMargins.small,
       },
       iconBox: {
         justifyContent: 'flex-end',
         position: 'relative',
       },
-      menu: {marginLeft: Styles.globalMargins.tiny},
+      menu: {marginLeft: Kb.Styles.globalMargins.tiny},
       nameContainer: {height: 24},
-      osButtons: Styles.platformStyles({
+      osButtons: Kb.Styles.platformStyles({
         isElectron: {
-          ...Styles.desktopStyles.windowDragging,
+          ...Kb.Styles.desktopStyles.windowDragging,
           flexGrow: 1,
         },
       }),
@@ -341,10 +352,10 @@ const styles = Styles.styleSheetCreate(
         paddingRight: 12,
         position: 'relative',
       },
-      username: Styles.platformStyles({
-        isElectron: {color: Styles.globalColors.blueLighter, flexGrow: 1, wordBreak: 'break-all'},
+      username: Kb.Styles.platformStyles({
+        isElectron: {color: Kb.Styles.globalColors.blueLighter, flexGrow: 1, wordBreak: 'break-all'},
       }),
-    } as const)
+    }) as const
 )
 
 export default TabBar

@@ -7,7 +7,7 @@ protocol SimpleFS {
 
 /*
   File manipulation interface
-  
+
   Caller provides OpID to one of these methods to begin an operation:
     simpleFSList
     simpleFSListRecursive
@@ -28,7 +28,7 @@ protocol SimpleFS {
   Operation must be closed by calling close
 */
 
-  // Random GUID provided by caller 
+  // Random GUID provided by caller
   fixed OpID(16);
 
   @typedef("int64") @lint("ignore") record KBFSRevision {}
@@ -282,7 +282,7 @@ protocol SimpleFS {
   void simpleFSSymlink(string target, Path link);
 
   /**
-   Begin recursive copy of directory 
+   Begin recursive copy of directory
 
    overwriteExistingFiles controls whether an existing file from `src` will
    overwrite a file with the same name in `dest`; if `false`, an error will be
@@ -750,4 +750,116 @@ protocol SimpleFS {
   // Cancel all uploads from the journal, which may result in
   // partially-uploaded changes, and leaked blocks on the bserver.
   void simpleFSCancelJournalUploads(KBFSPath path);
+
+  enum ArchiveJobStartPathType {
+    KBFS_0,
+    GIT_1
+  }
+  variant ArchiveJobStartPath switch (ArchiveJobStartPathType archiveJobStartPathType) {
+    case KBFS: KBFSPath;
+    case GIT: string;
+  }
+
+  record SimpleFSArchiveJobDesc {
+    string jobID;
+    KBFSArchivedPath kbfsPathWithRevision;
+    union {null, string} gitRepo; // only populated for git archives
+    boolean overwriteZip;
+    Time startTime;
+    string stagingPath; // CancelOrDismiss gets rid of this
+    string targetName; // target inside the stagingPath
+    string zipFilePath; // This could be either user specified (desktop), or inside the staging path.
+  }
+  SimpleFSArchiveJobDesc simpleFSArchiveStart(ArchiveJobStartPath archiveJobStartPath /* must be a directory */, string outputPath, boolean overwriteZip);
+
+  void simpleFSArchiveCancelOrDismissJob(string jobID);
+
+  enum SimpleFSFileArchiveState {
+    ToDo_0,
+    InProgress_1,
+    Complete_2,
+    Skipped_3
+  }
+  record SimpleFSArchiveFile {
+    SimpleFSFileArchiveState state;
+    DirentType direntType;
+    string sha256SumHex;
+  }
+  record SimpleFSArchiveJobState {
+    SimpleFSArchiveJobDesc desc;
+    map<string, SimpleFSArchiveFile> manifest; // path -> SimpleFSArchiveFile
+    SimpleFSArchiveJobPhase phase;
+    int64 bytesTotal;
+    int64 bytesCopied;
+    int64 bytesZipped;
+  }
+  enum SimpleFSArchiveJobPhase {
+    Queued_0,
+    Indexing_1,
+    Indexed_2,
+    Copying_3,
+    Copied_4,
+    Zipping_5,
+    Done_6
+  }
+  // SimpleFSArchiveState is the internal state of KBFS archiving work and is
+  // also used to serialize the state to persistent storage.
+  record SimpleFSArchiveState {
+    map<string, SimpleFSArchiveJobState> jobs; // job ID -> job state
+    Time lastUpdated;
+  }
+
+  record SimpleFSArchiveJobErrorState {
+    string error;
+    Time nextRetry;
+  }
+
+  record SimpleFSArchiveJobStatus {
+    SimpleFSArchiveJobDesc desc;
+    SimpleFSArchiveJobPhase phase;
+    int todoCount;
+    int inProgressCount;
+    int completeCount;
+    int skippedCount;
+    int totalCount;
+    int64 bytesTotal;
+    int64 bytesCopied;
+    int64 bytesZipped;
+    union{ null, SimpleFSArchiveJobErrorState } error;
+  }
+  record SimpleFSArchiveStatus {
+    array<SimpleFSArchiveJobStatus> jobs; // increasing order by start time
+    Time lastUpdated;
+  }
+  SimpleFSArchiveStatus simpleFSGetArchiveStatus();
+
+  record SimpleFSArchiveJobFreshness {
+    KBFSRevision currentTLFRevision;
+  }
+  SimpleFSArchiveJobFreshness simpleFSGetArchiveJobFreshness(string jobID);
+
+  record SimpleFSArchiveCheckArchiveResult {
+    SimpleFSArchiveJobDesc desc;
+    KBFSRevision currentTLFRevision;
+    map<string, string> pathsWithIssues;
+  }
+  SimpleFSArchiveCheckArchiveResult simpleFSArchiveCheckArchive(string archiveZipFilePath);
+
+  record SimpleFSArchiveAllFilesResult {
+    map<string, SimpleFSArchiveJobDesc> tlfPathToJobDesc;
+    map<string, string> tlfPathToError;
+    array<string> skippedTLFPaths;
+  }
+  // simpleFSArchiveAllGitRepos creates an archive job for each TLF in the
+  // favorites list. By default it skips public TLFs that the currently logged
+  // user is not a writer of.
+  SimpleFSArchiveAllFilesResult simpleFSArchiveAllFiles(string outputDir, boolean overwriteZip, boolean includePublicReadonly);
+
+  record SimpleFSArchiveAllGitReposResult {
+    map<string, SimpleFSArchiveJobDesc> gitRepoToJobDesc;
+    map<string, string> gitRepoToError;
+  }
+  // simpleFSArchiveAllGitRepos creates an archive job for each git repo that
+  // shows up in the user's Git tab.
+  SimpleFSArchiveAllGitReposResult simpleFSArchiveAllGitRepos(string outputDir, boolean overwriteZip);
 }

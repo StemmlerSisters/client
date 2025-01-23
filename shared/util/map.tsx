@@ -3,7 +3,7 @@ type MapType<M> = M extends Map<infer K, infer V> ? [K, V] : never
 /**
   Get a value from a map, if missing, add the default value and return it
  */
-export function mapGetEnsureValue<M extends Map<any, any>>(
+export function mapGetEnsureValue<M extends Map<unknown, unknown>>(
   map: M,
   key: MapType<M>[0],
   def: MapType<M>[1]
@@ -17,19 +17,6 @@ export function mapGetEnsureValue<M extends Map<any, any>>(
   }
 }
 
-export function mapEqual<M extends Map<any, any>>(map1: M, map2: M): boolean {
-  if (map1 === map2) {
-    return true
-  }
-  const k1 = [...map1.keys()]
-  const k2 = [...map2.keys()]
-  if (k1.length !== k2.length) {
-    return false
-  }
-
-  return !k1.some(key => map1.get(key) !== map2.get(key))
-}
-
-export function mapFilterByKey<M extends Map<any, any>>(map: M, keys: Set<string>): M {
-  return new Map([...map.entries()].filter(([k]) => keys.has(k))) as M
+export function mapFilterByKey<M extends ReadonlyMap<string, unknown>>(map: M, keys: ReadonlySet<string>): M {
+  return new Map([...map.entries()].filter(([k]) => keys.has(k))) as unknown as M
 }

@@ -1,19 +1,13 @@
 import * as React from 'react'
-import type * as Types from '../../../constants/types/fs'
-import * as Constants from '../../../constants/fs'
-import * as Container from '../../../util/container'
-import * as Styles from '../../../styles'
-import * as Kb from '../../../common-adapters'
-import * as FsGen from '../../../actions/fs-gen'
+import type * as T from '@/constants/types'
+import * as C from '@/constants'
+import * as Kb from '@/common-adapters'
 import ChooseView from './choose-view'
+import type {SizeType} from '@/common-adapters/icon'
 
-type SizeType = any
-// TODO: replace this when common adapters is TS
-// import { SizeType } from '../../../common-adapters/icon';
-
-type ClickableProps = {
+export type ClickableProps = {
   onClick: () => void
-  setRef: (arg0: React.Component<any> | null) => void
+  mref: React.RefObject<Kb.MeasureRef>
 }
 
 type ClickableComponent = {
@@ -23,7 +17,7 @@ type ClickableComponent = {
 
 type ClickableIcon = {
   actionIconWhite?: boolean
-  sizeType?: SizeType | null
+  sizeType?: SizeType
   type: 'icon'
 }
 
@@ -32,52 +26,72 @@ export type Clickable = ClickableComponent | ClickableIcon
 export type Props = {
   clickable: Clickable
   mode: 'row' | 'screen'
-  path: Types.Path
-  initView: Types.PathItemActionMenuView
+  path: T.FS.Path
+  initView: T.FS.PathItemActionMenuView
 }
 
-const IconClickable = props => (
-  <Kb.WithTooltip tooltip="More actions">
-    <Kb.Icon
-      fixOverdraw={false}
-      type="iconfont-ellipsis"
-      color={props.actionIconWhite ? Styles.globalColors.whiteOrBlueDark : Styles.globalColors.black_50}
-      hoverColor={props.actionIconWhite ? null : Styles.globalColors.black}
-      padding="tiny"
-      sizeType={props.sizeType || 'Default'}
-      onClick={props.onClick}
-      ref={props.setRef}
-    />
-  </Kb.WithTooltip>
-)
+type ICProps = {
+  measureRef: React.RefObject<Kb.MeasureRef>
+  onClick: () => void
+  sizeType: SizeType
+  actionIconWhite?: boolean | undefined
+}
+const IconClickable = React.memo(function IconClickable(props: ICProps) {
+  return (
+    <Kb.WithTooltip tooltip="More actions">
+      <Kb.Icon
+        fixOverdraw={false}
+        type="iconfont-ellipsis"
+        color={
+          props.actionIconWhite ? Kb.Styles.globalColors.whiteOrBlueDark : Kb.Styles.globalColors.black_50
+        }
+        hoverColor={props.actionIconWhite ? undefined : Kb.Styles.globalColors.black}
+        padding="tiny"
+        sizeType={props.sizeType}
+        onClick={props.onClick}
+        ref={props.measureRef}
+      />
+    </Kb.WithTooltip>
+  )
+})
 
 const PathItemAction = (props: Props) => {
-  const dispatch = Container.useDispatch()
-  const {initView} = props
+  const {initView, path, mode} = props
+  const setPathItemActionMenuDownload = C.useFSState(s => s.dispatch.setPathItemActionMenuDownload)
+  const setPathItemActionMenuView = C.useFSState(s => s.dispatch.setPathItemActionMenuView)
 
-  const {setShowingPopup, showingPopup, popup, popupAnchor} = Kb.usePopup(attachTo => (
-    <ChooseView
-      path={props.path}
-      mode={props.mode}
-      floatingMenuProps={{
-        attachTo,
-        containerStyle: styles.floatingContainer,
-        hide,
-        visible: showingPopup,
-      }}
-    />
-  ))
+  const makePopup = React.useCallback(
+    (p: Kb.Popup2Parms) => {
+      const {attachTo, hidePopup} = p
+
+      const hide = () => {
+        hidePopup()
+        setPathItemActionMenuDownload()
+      }
+
+      return (
+        <ChooseView
+          path={path}
+          mode={mode}
+          floatingMenuProps={{
+            attachTo,
+            containerStyle: styles.floatingContainer,
+            hide,
+            visible: true,
+          }}
+        />
+      )
+    },
+    [setPathItemActionMenuDownload, path, mode]
+  )
+  const {showPopup, showingPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
 
   const onClick = React.useCallback(() => {
-    dispatch(FsGen.createSetPathItemActionMenuView({view: initView}))
-    setShowingPopup(true)
-  }, [initView, dispatch, setShowingPopup])
-  const hide = React.useCallback(() => {
-    setShowingPopup(false)
-    dispatch(FsGen.createSetPathItemActionMenuDownload({downloadID: null, intent: null}))
-  }, [setShowingPopup, dispatch])
+    setPathItemActionMenuView(initView)
+    showPopup()
+  }, [initView, setPathItemActionMenuView, showPopup])
 
-  if (props.path === Constants.defaultPath) {
+  if (props.path === C.FS.defaultPath) {
     return null
   }
 
@@ -86,13 +100,13 @@ const PathItemAction = (props: Props) => {
   return (
     <>
       {props.clickable.type === 'component' && (
-        <props.clickable.component onClick={onClick} setRef={popupAnchor as any} />
+        <props.clickable.component onClick={onClick} mref={popupAnchor} />
       )}
       {props.clickable.type === 'icon' && (
         <IconClickable
           onClick={onClick}
-          setRef={popupAnchor}
-          sizeType={props.clickable.sizeType}
+          measureRef={popupAnchor}
+          sizeType={props.clickable.sizeType ?? 'Default'}
           actionIconWhite={props.clickable.actionIconWhite}
         />
       )}
@@ -101,10 +115,10 @@ const PathItemAction = (props: Props) => {
   )
 }
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
-      floatingContainer: Styles.platformStyles({
+      floatingContainer: Kb.Styles.platformStyles({
         common: {
           overflow: 'visible',
         },
@@ -115,7 +129,7 @@ const styles = Styles.styleSheetCreate(
           marginTop: undefined,
         },
       }),
-    } as const)
+    }) as const
 )
 
 export default PathItemAction

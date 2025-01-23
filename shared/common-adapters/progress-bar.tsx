@@ -1,28 +1,39 @@
 import Box from './box'
-import {useSpring, animated} from 'react-spring'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 
 type Props = {
   ratio: number
-  style?: any
-  fillStyle?: any
+  style?: Styles.StylesCrossPlatform
+  fillStyle?: Styles.StylesCrossPlatform
+  flatRight?: boolean
+  flatLeft?: boolean
 }
 
-const AnimatedBox = animated(Box)
-
-const ProgressBar = ({ratio, style, fillStyle}: Props) => {
-  const animatedStyles = useSpring({
-    from: {...styles.inner, ...fillStyle},
-    to: {width: `${Math.max(0, Math.min(1, ratio)) * 100}%`},
-  })
+const ProgressBar = ({ratio, style, fillStyle, flatLeft, flatRight}: Props) => {
+  const animatedStyles = {
+    ...styles.inner,
+    ...fillStyle,
+    ...(flatLeft && styles.flatLeft),
+    ...(flatRight && styles.flatRight),
+    width: `${Math.max(0, Math.min(1, ratio)) * 100}%`,
+  } as const
   return (
-    <Box style={Styles.collapseStyles([styles.outer, style])}>
-      <AnimatedBox style={animatedStyles} />
+    <Box
+      style={Styles.collapseStyles([
+        styles.outer,
+        style,
+        flatLeft ? styles.flatLeft : {},
+        flatRight ? styles.flatRight : {},
+      ])}
+    >
+      <Box style={animatedStyles} />
     </Box>
   )
 }
 
 const styles = Styles.styleSheetCreate(() => ({
+  flatLeft: {borderBottomLeftRadius: 0, borderTopLeftRadius: 0},
+  flatRight: {borderBottomRightRadius: 0, borderTopRightRadius: 0},
   inner: {
     backgroundColor: Styles.globalColors.blue,
     borderRadius: 3,

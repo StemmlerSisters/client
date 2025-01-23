@@ -1,31 +1,31 @@
 import * as React from 'react'
-import * as Kb from '../../common-adapters'
-import * as Styles from '../../styles'
+import * as Kb from '@/common-adapters'
 
 export type HeaderType = 'Default' | 'Strong'
 export type Props = {
   icon?: boolean
   title?: string
   onClose?: () => void
-  style?: Object
+  style?: object
   children?: React.ReactNode
   windowDragging?: boolean
-  type: HeaderType
+  type?: HeaderType
 }
 
 class DragHeader extends React.Component<Props> {
-  static defaultProps = {type: 'Default', windowDragging: true}
-
   renderDefault() {
-    const maybeWindowDraggingStyle = this.props.windowDragging ? Styles.desktopStyles.windowDragging : {}
+    const maybeWindowDraggingStyle =
+      this.props.windowDragging ?? true ? Kb.Styles.desktopStyles.windowDragging : {}
     return (
       <div
-        style={Styles.collapseStyles([
-          styles.container,
-          maybeWindowDraggingStyle,
-          styles.defaultContainer,
-          this.props.style,
-        ])}
+        style={
+          Kb.Styles.collapseStyles([
+            styles.container,
+            maybeWindowDraggingStyle,
+            styles.defaultContainer,
+            this.props.style,
+          ]) as React.CSSProperties
+        }
       >
         {this.props.children}
         {this.props.icon && <Kb.Icon type="icon-keybase-logo-24" />}
@@ -40,22 +40,25 @@ class DragHeader extends React.Component<Props> {
   }
 
   renderStrong() {
-    const maybeWindowDraggingStyle = this.props.windowDragging ? Styles.desktopStyles.windowDragging : {}
+    const maybeWindowDraggingStyle =
+      this.props.windowDragging ?? true ? Kb.Styles.desktopStyles.windowDragging : {}
     return (
       <div
-        style={Styles.collapseStyles([
-          styles.container,
-          maybeWindowDraggingStyle,
-          styles.strongContainer,
-          this.props.style,
-        ])}
+        style={
+          Kb.Styles.collapseStyles([
+            styles.container,
+            maybeWindowDraggingStyle,
+            styles.strongContainer,
+            this.props.style,
+          ]) as React.CSSProperties
+        }
       >
         {this.props.title && (
           <Kb.Text
             type="Header"
             negative={true}
-            style={Styles.platformStyles({
-              common: {flex: 1, ...Styles.globalStyles.flexBoxCenter, paddingTop: 6},
+            style={Kb.Styles.platformStyles({
+              common: {flex: 1, ...Kb.Styles.globalStyles.flexBoxCenter, paddingTop: 6},
               isElectron: {cursor: 'default'},
             })}
           >
@@ -71,29 +74,29 @@ class DragHeader extends React.Component<Props> {
   }
 
   render() {
-    if (this.props.type === 'Default') {
+    if ((this.props.type ?? 'Default') === 'Default') {
       return this.renderDefault()
-    } else if (this.props.type === 'Strong') {
-      return this.renderStrong()
     } else {
-      return <div />
+      return this.renderStrong()
     }
   }
 }
 
 const styles = {
-  closeIcon: Styles.collapseStyles([
-    Styles.desktopStyles.windowDraggingClickable,
-    Styles.desktopStyles.clickable,
-  ] as any),
-  container: Styles.collapseStyles([
-    Styles.globalStyles.flexBoxRow,
-    Styles.desktopStyles.noSelect,
-    {
+  closeIcon: Kb.Styles.platformStyles({
+    isElectron: {
+      ...Kb.Styles.desktopStyles.windowDraggingClickable,
+      ...Kb.Styles.desktopStyles.clickable,
+    },
+  }),
+  container: Kb.Styles.platformStyles({
+    isElectron: {
+      ...Kb.Styles.globalStyles.flexBoxRow,
+      ...Kb.Styles.desktopStyles.noSelect,
       paddingLeft: 10,
       paddingRight: 10,
     },
-  ] as any),
+  }),
   defaultContainer: {
     paddingBottom: 6,
     paddingTop: 6,
@@ -104,7 +107,7 @@ const styles = {
     width: 22,
   },
   strongContainer: {
-    backgroundColor: Styles.globalColors.blue,
+    backgroundColor: Kb.Styles.globalColors.blue,
     paddingBottom: 12,
     paddingTop: 6,
   },

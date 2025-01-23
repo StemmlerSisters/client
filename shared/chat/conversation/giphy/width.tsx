@@ -19,7 +19,7 @@ export const getMargins = (totalWidth: number, widths: Array<number>) => {
   const res: Array<number> = []
   let longRow: Array<Image> = []
   for (let index = 0; index < images.length; index++) {
-    const im = images[index]
+    const im = images[index]!
     longRow.push(im)
     if (groupWidth(longRow) >= totalWidth) {
       // we have a row now that can be compressed, pick between it and the row minus the last image,
@@ -182,11 +182,11 @@ const expandRow = (totalWidth: number, row: Array<Image>) => {
 }
 
 const pickRow = (totalWidth: number, longIndex: number, longRow: Array<Image>, shortRow: Array<Image>) => {
-  let compressed
+  let compressed: Array<Image>
   const expanded = expandRow(totalWidth, shortRow)
   try {
     compressed = compressRow(totalWidth, longRow)
-  } catch (e) {
+  } catch {
     return {
       index: longIndex - 1,
       row: expanded,

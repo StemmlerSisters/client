@@ -103,6 +103,12 @@
     },
     {
       "type": "record",
+      "name": "ArchiveJobID",
+      "fields": [],
+      "typedef": "string"
+    },
+    {
+      "type": "record",
       "name": "InboxVersInfo",
       "fields": [
         {
@@ -209,7 +215,8 @@
         "PLAINTEXTMOBILE_1",
         "PLAINTEXTDESKTOP_2",
         "DEFAULTSOUNDMOBILE_3",
-        "DISABLETYPING_4"
+        "DISABLETYPING_4",
+        "CONVERTHEIC_5"
       ]
     },
     {
@@ -1536,7 +1543,8 @@
         "BOTCOMMANDS_10",
         "EMOJISOURCE_11",
         "FORWARDMSG_12",
-        "LOCALIZE_13"
+        "LOCALIZE_13",
+        "ARCHIVE_14"
       ]
     },
     {

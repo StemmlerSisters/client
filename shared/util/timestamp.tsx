@@ -1,14 +1,15 @@
 import * as dateFns from 'date-fns'
 import {enUS} from 'date-fns/locale'
-import {uses24HourClock} from '../constants/platform'
+import {uses24HourClock} from '@/constants/platform'
 
 const hourMinuteString = uses24HourClock ? 'HH:mm' : 'h:mm a'
 const hourMinuteSecondString = uses24HourClock ? 'HH:mm:ss' : 'h:mm:ss a'
 
 // getting this time is very slow on android so we cache it, it never grows large
 const chatTimeCache = new Map<number, string>()
-let cacheData = dateFns.startOfDay(new Date())
-export function formatTimeForChat(time: number): string | null {
+export const clearChatTimeCache = () => chatTimeCache.clear()
+const cacheData = dateFns.startOfDay(new Date())
+export function formatTimeForChat(time: number): string {
   // if the date changes, clear our cache as the 'yesterday' stuff is actually sensitive to this
   if (!dateFns.isToday(cacheData)) {
     chatTimeCache.clear()
@@ -97,14 +98,16 @@ const formatRelativeCalendarForFS = (dontUpperCase: boolean, token: string, date
     return dateFns.isSameYear(date, baseDate) ? "EEE MMM d 'at' p" : "EEE MMM d yyyy 'at' p"
   }
 
-  return dontUpperCase ? noUpperCaseFirst[token] : upperCaseFirst[token]
+  return dontUpperCase
+    ? noUpperCaseFirst[token as keyof typeof noUpperCaseFirst]
+    : upperCaseFirst[token as keyof typeof upperCaseFirst]
 }
 
 export const formatTimeForFS = (time: number, dontUpperCase: boolean): string =>
   dateFns.formatRelative(time, Date.now(), {
     locale: {
       ...enUS,
-      formatRelative: (token, date, baseDate) =>
+      formatRelative: (token: string, date: Date, baseDate: Date) =>
         formatRelativeCalendarForFS(dontUpperCase, token, date, baseDate),
     },
   })
@@ -118,8 +121,8 @@ export const formatDuration = (duration: number): string => {
   return d.getUTCHours()
     ? `${d.getUTCHours()} hr`
     : d.getUTCMinutes()
-    ? `${d.getUTCMinutes()} min`
-    : `${d.getUTCSeconds()} s`
+      ? `${d.getUTCMinutes()} min`
+      : `${d.getUTCSeconds()} s`
 }
 
 export const formatAudioRecordDuration = (duration: number): string => {
@@ -146,7 +149,7 @@ export const formatDurationForLocation = (duration: number): string => {
   return dateFns.formatDistanceStrict(0, duration, {
     locale: {
       ...enUS,
-      formatDistance: (token, count, _) => formatDistanceAbbr(token, count),
+      formatDistance: (token: Token, count: number, _) => formatDistanceAbbr(token, count),
     },
   })
 }
@@ -156,14 +159,6 @@ export const formatDurationFromNowTo = (timeInFuture?: number): string =>
 
 export function formatTimeForPopup(time: number): string {
   return dateFns.format(time, 'EEE MMM dd ' + hourMinuteSecondString) // Wed Jan 5 2016 4:34:15 PM
-}
-
-export function formatTimeForStellarDetail(timestamp: Date) {
-  return dateFns.format(timestamp, 'EEE, MMM dd yyyy - ' + hourMinuteString) // Tue, Jan 5 2018 - 4:34 PM
-}
-
-export function formatTimeForStellarTooltip(timestamp: Date) {
-  return dateFns.formatISO(timestamp)
 }
 
 export function formatTimeForRevoked(time: number): string {
@@ -188,24 +183,27 @@ export function formatTimeForTeamMember(time: number): string {
   return dateFns.format(new Date(time), 'MMM yyyy')
 }
 
-export function daysToLabel(days: number): string {
-  let label = `${days} day`
-  if (days !== 1) {
-    label += 's'
-  }
-  return label
-}
-
 const formatDistanceLocale = {
+  aboutXHours: '{{count}}h',
+  aboutXMonths: '{{count}}mo',
+  aboutXWeeks: '{{count}}w',
+  aboutXYears: '{{count}}y',
+  almostXYears: '{{count}}y',
+  halfAMinute: '30s',
+  lessThanXMinutes: '{{count}}m',
+  lessThanXSeconds: '{{count}}s',
+  overXYears: '{{count}}y',
   xDays: '{{count}}d',
   xHours: '{{count}}h',
   xMinutes: '{{count}}m',
   xMonths: '{{count}}mo',
   xSeconds: '{{count}}s',
+  xWeeks: '{{count}}w',
   xYears: '{{count}}y',
 }
+type Token = keyof typeof formatDistanceLocale
 
-const formatDistanceAbbr = (token: keyof typeof formatDistanceLocale, count: number): string =>
+const formatDistanceAbbr = (token: dateFns.FormatDistanceToken, count: number): string =>
   formatDistanceLocale[token].replace('{{count}}', String(count))
 
 export function formatTimeForPeopleItem(time: number): string {
@@ -213,7 +211,7 @@ export function formatTimeForPeopleItem(time: number): string {
     locale: {
       ...enUS,
       formatDistance: (token, count, _) =>
-        token == 'xSeconds' && count == 1 ? 'now' : formatDistanceAbbr(token, count),
+        token === 'xSeconds' && count === 1 ? 'now' : formatDistanceAbbr(token, count),
     },
   })
 }
@@ -249,9 +247,4 @@ export function formatDurationShort(ms: number): string {
     return `${Math.round(ms / oneMinuteInMs)}m`
   }
   return `${Math.floor(ms / 1000)}s`
-}
-
-// 10 {seconds, minutes, hours, days, months, years}
-export function formatDurationLong(date: Date, baseDate: Date): string {
-  return dateFns.formatDistanceStrict(date, baseDate)
 }

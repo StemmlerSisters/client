@@ -1,16 +1,16 @@
-import * as React from 'react'
-import {ConversationIDKey} from '../../constants/types/chat2'
-import * as Types from '../../constants/types/chat2'
+import type * as React from 'react'
+import type * as T from '@/constants/types'
 
 export type Props = {
   allowShowFloatingButton: boolean
+  selectedConversationIDKey: T.Chat.ConversationIDKey
   inboxNumSmallRows: number
   isSearching: boolean
   navKey: string
   neverLoaded: boolean
   onNewChat: () => void
-  onUntrustedInboxVisible: (conversationIDKeys: Array<ConversationIDKey>) => void
-  rows: Array<Types.ChatInboxRowItem>
+  onUntrustedInboxVisible: (conversationIDKeys: Array<T.Chat.ConversationIDKey>) => void
+  rows: Array<T.Chat.ChatInboxRowItem>
   setInboxNumSmallRows: (rows: number) => void
   smallTeamsExpanded: boolean
   toggleSmallTeamsExpanded: () => void
@@ -18,4 +18,5 @@ export type Props = {
   unreadTotal: number
 }
 
-export default class Inbox extends React.Component<Props> {}
+declare const Inbox: (p: Props) => React.ReactNode
+export default Inbox

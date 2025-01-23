@@ -1,4 +1,4 @@
-import * as React from 'react'
+import type * as React from 'react'
 
 export {KeyboardAvoidingView as default} from 'react-native'
 
@@ -8,6 +8,8 @@ export type Props = {
   extraOffset?: number
   // if we're inside something that's using safe, we can compensate
   extraPadding?: number
+  // only used on ipad modals since they float
+  compensateNotBeingOnBottom?: boolean
 }
 
-export declare class KeyboardAvoidingView2 extends React.Component<Props> {}
+export declare const KeyboardAvoidingView2: (p: Props) => React.ReactNode

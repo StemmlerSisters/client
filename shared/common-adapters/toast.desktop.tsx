@@ -1,6 +1,6 @@
 import type {Props} from './toast'
 import FloatingBox from './floating-box'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 import './toast.css'
 
 const Kb = {
@@ -8,10 +8,16 @@ const Kb = {
 }
 
 const Toast = (props: Props) => (
-  <Kb.FloatingBox attachTo={props.attachTo} propagateOutsideClicks={true} position={props.position}>
+  <Kb.FloatingBox
+    attachTo={props.attachTo}
+    propagateOutsideClicks={true}
+    position={props.position}
+    containerStyle={styles.float}
+    disableEscapeKey={true}
+  >
     <div
       className={Styles.classNames({visible: props.visible}, props.className, 'fadeBox')}
-      style={Styles.collapseStyles([styles.container, props.containerStyle])}
+      style={Styles.collapseStyles([styles.container, props.containerStyle]) as React.CSSProperties}
     >
       {props.children}
     </div>
@@ -33,6 +39,10 @@ const styles = Styles.styleSheetCreate(() => ({
       paddingRight: Styles.globalMargins.tiny,
       paddingTop: Styles.globalMargins.xtiny,
       pointerEvents: 'none',
+      position: 'relative',
     },
+  }),
+  float: Styles.platformStyles({
+    isElectron: {pointerEvents: 'none'},
   }),
 }))

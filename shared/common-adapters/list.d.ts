@@ -1,13 +1,13 @@
-import * as React from 'react'
-import {StylesCrossPlatform} from '../styles'
+import type * as React from 'react'
+import type {StylesCrossPlatform} from '@/styles'
 
 export type Props<Item> = {
   bounces?: boolean // mobile only
   indexAsKey?: boolean
-  items: Array<Item>
+  items: ReadonlyArray<Item>
   style?: StylesCrossPlatform
   contentContainerStyle?: StylesCrossPlatform
-  fixedHeight?: number | null
+  fixedHeight?: number
   renderItem: (index: number, item: Item) => React.ReactElement
   keyProperty?: string // if passed uses item[keyProperty] for the item keys
   selectedIndex?: number // TODO work on mobile
@@ -17,11 +17,12 @@ export type Props<Item> = {
   onEndReached?: () => void
   ListHeaderComponent?: React.ComponentType<any> | React.ReactElement
   onEndReachedThreshold?: number // mobile only
-  onScroll?: (e: any) => void // mobile only
+  onScroll?: (e: unknown) => void // mobile only
   reAnimated?: boolean // mobile only, make list animated
 }
 
 /**
  * Semi deprecated. Use list2 if your items are a fixed height
  */
-export default class List<Item> extends React.Component<Props<Item>> {}
+declare function List<Item>(p: Props<Item>): React.ReactNode
+export default List

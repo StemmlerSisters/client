@@ -1,7 +1,9 @@
-export const bodyToJSON = (body?: Uint8Array) => {
+import {uint8ArrayToString} from 'uint8array-extras'
+
+export const bodyToJSON = (body?: Uint8Array): unknown => {
   if (!body) return undefined
   try {
-    return JSON.parse(Buffer.from(body).toString())
+    return JSON.parse(uint8ArrayToString(body))
   } catch {
     return undefined
   }

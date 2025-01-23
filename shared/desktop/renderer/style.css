@@ -139,6 +139,7 @@ table {
   src: url('../../fonts/kb.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
+  font-display: block;
 }
 
 /* Source Code Pro */
@@ -146,12 +147,14 @@ table {
   font-family: 'Source Code Pro';
   font-weight: 500;
   src: url('../../fonts/SourceCodePro-Medium.ttf') format('truetype');
+  font-display: block;
 }
 
 @font-face {
   font-family: 'Source Code Pro';
   font-weight: 600;
   src: url('../../fonts/SourceCodePro-Semibold.ttf') format('truetype');
+  font-display: block;
 }
 /* End Source Code Pro */
 
@@ -160,6 +163,7 @@ table {
   font-family: 'Keybase';
   font-weight: 500;
   src: url('../../fonts/keybase-medium.ttf') format('truetype');
+  font-display: block;
 }
 
 @font-face {
@@ -167,12 +171,14 @@ table {
   font-weight: 500;
   font-style: italic;
   src: url('../../fonts/keybase-medium-italic.ttf') format('truetype');
+  font-display: block;
 }
 
 @font-face {
   font-family: 'Keybase';
   font-weight: 600;
   src: url('../../fonts/keybase-semibold.ttf') format('truetype');
+  font-display: block;
 }
 
 @font-face {
@@ -180,12 +186,14 @@ table {
   font-weight: 600;
   font-style: italic;
   src: url('../../fonts/keybase-semibold-italic.ttf') format('truetype');
+  font-display: block;
 }
 
 @font-face {
   font-family: 'Keybase';
   font-weight: 700;
   src: url('../../fonts/keybase-bold.ttf') format('truetype');
+  font-display: block;
 }
 
 @font-face {
@@ -193,14 +201,29 @@ table {
   font-weight: 700;
   font-style: italic;
   src: url('../../fonts/keybase-bold-italic.ttf') format('truetype');
+  font-display: block;
 }
 
 @font-face {
   font-family: 'Keybase';
   font-weight: 800;
   src: url('../../fonts/keybase-extrabold.ttf') format('truetype');
+  font-display: block;
 }
 /* End Keybase */
+
+:root {
+  --size-xxtiny: 2px;
+  --size-xtiny: 4px;
+  --size-tiny: 8px;
+  --size-xsmall: 12px;
+  --size-small: 16px;
+  --size-medium: 24px;
+  --size-mediumLarge: 32px;
+  --size-large: 40px;
+  --size-xlarge: 64px;
+  --size-border-radius: 4px;
+}
 
 html {
   box-sizing: border-box;
@@ -260,22 +283,22 @@ body {
 ::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-color);
   border-radius: 3px;
-}
-.darkMode ::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-color-dark);
-  border-radius: 3px;
+  .darkMode & {
+    background-color: var(--scrollbar-color-dark);
+    border-radius: 3px;
+  }
 }
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-color-hover);
-}
-.darkMode ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-color-hover-dark);
+  .darkMode & {
+    background-color: var(--scrollbar-color-hover-dark);
+  }
 }
 ::-webkit-scrollbar-thumb:active {
   background-color: var(--scrollbar-color-active);
-}
-.darkMode ::-webkit-scrollbar-thumb:active {
-  background-color: var(--scrollbar-color-active-dark);
+  .darkMode & {
+    background-color: var(--scrollbar-color-active-dark);
+  }
 }
 ::-webkit-scrollbar-thumb:vertical {
   min-height: var(--scrollbar-minlength);
@@ -284,8 +307,10 @@ body {
   min-width: var(--scrollbar-minlength);
 }
 
-.darkMode input {
-  background-color: #191919;
+input {
+  .darkMode & {
+    background-color: #191919;
+  }
 }
 
 #root {
@@ -303,74 +328,73 @@ body {
 
 .underline-hover-no-underline {
   text-decoration: underline;
-}
-
-.underline-hover-no-underline:hover {
-  text-decoration: none;
+  &:hover {
+    text-decoration: none;
+  }
 }
 
 .emoji-picker-emoji-box {
   border-radius: 2px;
-}
-
-.emoji-picker-emoji-box:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-}
-
-.darkMode .emoji-picker-emoji-box:hover {
-  background-color: rgba(255, 255, 255, 0.15);
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    .darkMode & {
+      background-color: rgba(255, 255, 255, 0.15);
+    }
+  }
 }
 
 .hover-underline {
   text-decoration: none;
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
-.hover-underline:hover {
-  text-decoration: underline;
-}
-
-.hover-underline-container:hover .underline {
-  text-decoration: underline;
-}
-
-.hover-underline-container:hover .hover-underline-child {
-  text-decoration: underline;
-}
-.underline-never {
-  text-decoration: none !important;
+.hover-underline-container {
+  &:hover {
+    .underline {
+      text-decoration: underline;
+    }
+    .hover-underline-child {
+      text-decoration: underline;
+    }
+    .underline-never {
+      text-decoration: none !important;
+    }
+  }
 }
 
 .hover-opacity {
   opacity: 0.8;
-}
-.hover-opacity:hover {
-  opacity: 1;
-}
-
-.hover-opacity.inverted {
-  opacity: 1;
-}
-.hover-opacity.inverted:hover {
-  opacity: 0.8;
-}
-
-.hover-container .hover-opacity-full {
-  opacity: 0;
-}
-.hover-container:hover .hover-opacity-full {
-  opacity: 1;
+  &:hover {
+    opacity: 1;
+  }
+  &.inverted {
+    opacity: 1;
+    &:hover {
+      opacity: 0.8;
+    }
+  }
 }
 
-.hover-container:hover .hover-reverse-row {
-  flex-direction: row-reverse;
-}
-
-.hover-container .hover-visible {
-  display: none;
-}
-
-.hover-container:hover .hover-visible {
-  display: flex;
+.hover-container {
+  .hover-opacity-full {
+    opacity: 0;
+  }
+  &:hover {
+    .hover-opacity-full {
+      opacity: 1;
+    }
+    .hover-reverse-row {
+      flex-direction: row-reverse;
+    }
+    .hover-visible {
+      display: flex;
+    }
+  }
+  .hover-visible {
+    display: none;
+  }
 }
 
 .underline {
@@ -386,23 +410,22 @@ body {
 .fade-anim-enter {
   opacity: 0;
   pointer-events: none;
-}
 
-.fade-anim-enter.fade-anim-enter-active {
-  opacity: 1;
-  pointer-events: auto;
-  transition: opacity 250ms ease-in-out;
+  &.fade-anim-enter-active {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity 250ms ease-in-out;
+  }
 }
 
 .fade-anim-exit {
   opacity: 1;
   pointer-events: auto;
-}
-
-.fade-anim-exit.fade-anim-exit-active {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 250ms ease-in-out;
+  &.fade-anim-exit-active {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 250ms ease-in-out;
+  }
 }
 
 .fade-background-color {
@@ -418,6 +441,14 @@ body {
   border: none;
   background: none;
   box-shadow: none;
+  vertical-align: bottom;
+  display: inline;
+  .emoji-native {
+    line-height: 0;
+    width: 0;
+    height: 0;
+    display: inline-block;
+  }
 }
 
 .emoji-native {
@@ -425,20 +456,21 @@ body {
     'Noto Color Emoji', 'Android Emoji';
 }
 
-.emoji .emoji-native {
-  line-height: 0;
-  width: 0;
-  height: 0;
-  display: inline-block;
-}
-
-.emoji {
-  vertical-align: middle;
-  display: inline;
-}
-
 .center-emojis .emoji > span {
   vertical-align: middle;
+}
+
+@keyframes fadeInGeneric {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.fade-in-generic {
+  animation: fadeInGeneric 0.25s;
 }
 
 .growFadeInSmall {
@@ -455,19 +487,31 @@ body {
 
 .lightMode {
   background-color: #ffffff;
+  &.isWidget {
+    background-color: transparent;
+  }
 }
 .darkMode {
   background-color: #191919;
+  &.isWidget {
+    background-color: transparent;
+  }
 }
 
 .addInviteAndLinkBox {
   transition: box-shadow 0.35s;
 }
-.headerTitle:hover .addInviteAndLinkBox {
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+.headerTitle:hover {
+  .addInviteAndLinkBox {
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  }
 }
-.darkMode .headerTitle:hover .addInviteAndLinkBox {
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.8);
+.darkMode {
+  .headerTitle:hover {
+    .addInviteAndLinkBox {
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.8);
+    }
+  }
 }
 
 .selectionPopup {
@@ -478,9 +522,9 @@ body {
   transition: height 0.2s;
   height: 32px;
   overflow: hidden;
-}
-.hideableDropdown.hidden {
-  height: 0;
+  &.hidden {
+    height: 0;
+  }
 }
 
 .selectable {
@@ -494,4 +538,89 @@ body {
 
 .clickable-box2 {
   cursor: pointer;
+}
+
+.tooltip {
+  position: relative;
+}
+.tooltip:before {
+  transition: opacity 0.2s ease-in-out 0.3s;
+  /* body small text */
+  -webkit-font-smoothing: antialiased;
+  align-items: center;
+  background-color: var(--color-black);
+  border-radius: 4px;
+  border-width: 0px;
+  color: rgba(0, 0, 0, 0.85);
+  color: var(--color-white);
+  content: attr(data-tooltip);
+  display: inline-flex;
+  opacity: 0;
+  flex-grow: 1;
+  flex-shrink: 0;
+  font-family: Keybase;
+  font-size: 13px;
+  font-weight: 400;
+  justify-content: center;
+  line-height: 17px;
+  padding: 4px 8px;
+  pointer-events: none;
+  position: absolute;
+  text-rendering: optimizeLegibility;
+  white-space: nowrap;
+  z-index: 999;
+  left: 50%;
+  transform: translate(-50%, -100%);
+  /* move out so it doesn't affect measuring*/
+  top: -99999px;
+}
+
+.tooltip:hover:before {
+  opacity: 1;
+  top: initial;
+}
+
+.tooltip-bottom-center:hover:before {
+  opacity: 1;
+  top: initial;
+  transform: translate(-50%, 100%);
+}
+
+.tooltip-top-left:hover:before {
+  opacity: 1;
+  top: initial;
+  transform: translate(-100%, -100%);
+}
+
+.tooltip-top-right:hover:before {
+  opacity: 1;
+  top: initial;
+  transform: translate(0%, -100%);
+}
+
+.tooltip-bottom-left:hover:before {
+  opacity: 1;
+  top: initial;
+  transform: translate(-100%, 100%);
+}
+
+.tooltip-bottom-right:hover:before {
+  opacity: 1;
+  top: initial;
+  transform: translate(0%, 100%);
+}
+
+.tooltip-right:hover:before {
+  opacity: 1;
+  transform: translate(5px, -50%);
+  top: 50%;
+  left: 100%;
+}
+
+.tooltip-left:hover:before {
+  opacity: 1;
+  transform: translate(-5px, -50%);
+  top: 50%;
+  left: initial;
+  right: 100%;
 }

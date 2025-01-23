@@ -2,7 +2,7 @@ import * as React from 'react'
 export {default as ParticipantMeta} from './meta'
 export {default as Activity, useActivityLevels, ModalTitle} from './activity'
 export {ChannelsWidget} from './channels-widget'
-export {useChannelMeta, useAllChannelMetas, useChannelParticipants} from './channel-hooks'
+export {useAllChannelMetas, useChannelParticipants} from './channel-hooks'
 export {default as SelectionPopup} from './selection-popup'
 export {default as EnableContactsPopup} from './enable-contacts'
 export {default as useTeamLinkPopup} from './use-team-link-popup'
@@ -26,7 +26,11 @@ export const usePhoneNumberList = () => {
    * Push a phone number to the list.
    */
   const addPhoneNumber = () => {
-    phoneNumbers.push({key: phoneNumbers[phoneNumbers.length - 1].key + 1, phoneNumber: '', valid: false})
+    phoneNumbers.push({
+      key: (phoneNumbers.at(-1)?.key ?? 0) + 1,
+      phoneNumber: '',
+      valid: false,
+    })
     setPhoneNumbers([...phoneNumbers])
   }
   /**
@@ -41,9 +45,7 @@ export const usePhoneNumberList = () => {
    * Reset the list to contain one empty phone number.
    */
   const resetPhoneNumbers = () => {
-    setPhoneNumbers([
-      {key: (phoneNumbers[phoneNumbers.length - 1]?.key ?? -1) + 1, phoneNumber: '', valid: false},
-    ])
+    setPhoneNumbers([{key: (phoneNumbers.at(-1)?.key ?? -1) + 1, phoneNumber: '', valid: false}])
   }
 
   return {addPhoneNumber, phoneNumbers, removePhoneNumber, resetPhoneNumbers, setPhoneNumber}

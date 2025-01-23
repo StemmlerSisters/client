@@ -1,11 +1,11 @@
 import * as React from 'react'
 import {NativeAnimated, NativeEasing} from './native-wrappers.native'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 import type {Props} from './switch-toggle'
 
 class SwitchToggle extends React.PureComponent<Props> {
   _offset = new NativeAnimated.Value(this._getOffset())
-  _animation: any = null
+  _animation: NativeAnimated.CompositeAnimation | undefined
 
   _getOffset() {
     return this.props.on ? enabledOffset : disabledOffset
@@ -27,7 +27,7 @@ class SwitchToggle extends React.PureComponent<Props> {
   render() {
     return (
       <NativeAnimated.View
-        style={Styles.collapseStyles([
+        style={[
           styles.outer,
           {
             backgroundColor: this._offset.interpolate({
@@ -39,11 +39,9 @@ class SwitchToggle extends React.PureComponent<Props> {
             }),
           },
           this.props.style,
-        ] as any)}
+        ]}
       >
-        <NativeAnimated.View
-          style={Styles.collapseStyles([styles.inner, {marginLeft: this._offset}] as any)}
-        />
+        <NativeAnimated.View style={[styles.inner, {marginLeft: this._offset}]} />
       </NativeAnimated.View>
     )
   }

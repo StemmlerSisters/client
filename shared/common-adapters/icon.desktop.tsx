@@ -1,26 +1,22 @@
 import * as Shared from './icon.shared'
-import * as Styles from '../styles'
-import {colors, darkColors} from '../styles/colors'
+import * as Styles from '@/styles'
+import {colors, darkColors} from '@/styles/colors'
 import * as React from 'react'
-import logger from '../logger'
+import logger from '@/logger'
 import {iconMeta} from './icon.constants-gen'
 import invert from 'lodash/invert'
+import {getAssetPath} from '@/constants/platform.desktop'
 import type {Props, IconType} from './icon'
-import {getAssetPath} from '../constants/platform.desktop'
+import type {MeasureRef} from './measure-ref'
 
 const invertedLight = invert(colors)
 const invertedDark = invert(darkColors)
 
 const Icon = React.memo<Props>(
-  // @ts-ignore
-  React.forwardRef<HTMLDivElement | HTMLImageElement, Props>(function Icon(props, ref) {
+  React.forwardRef<MeasureRef, Props>(function Icon(props, ref) {
     const {type, inheritColor, opacity, fontSize, noContainer, onMouseEnter, onMouseLeave, style} = props
-    const {className, hint, colorOverride, padding, boxStyle} = props
-    const iconType = Shared.typeToIconMapper(type)
-    if (!iconType) {
-      logger.warn('Null iconType passed')
-      return null
-    }
+    const {className, hint, colorOverride, padding, boxStyle, allowLazy = true} = props
+    const iconType = type
 
     if (!Shared.isValidIconType(iconType)) {
       logger.warn('Unknown icontype passed', iconType)
@@ -31,13 +27,28 @@ const Icon = React.memo<Props>(
     const onClick = props.onClick
       ? (e: React.BaseSyntheticEvent) => {
           e.stopPropagation()
-          // @ts-ignore
-          props.onClick?.(props.onClick.length ? e : undefined) // only pass params to functions that need them, helps with electron bridge
+          props.onClick?.(e)
         }
       : undefined
 
     let color = Shared.defaultColor(type)
     let hoverColor = Shared.defaultHoverColor(type)
+
+    const divRef = React.useRef<HTMLDivElement>(null)
+    const imgRef = React.useRef<HTMLImageElement>(null)
+
+    React.useImperativeHandle(
+      ref,
+      () => {
+        return {
+          divRef,
+          measure() {
+            return divRef.current?.getBoundingClientRect() ?? imgRef.current?.getBoundingClientRect()
+          },
+        }
+      },
+      []
+    )
 
     if (inheritColor) {
       color = 'inherit'
@@ -53,11 +64,11 @@ const Icon = React.memo<Props>(
     // explicit
     if (fontSize) {
       fontSizeHint = {fontSize: fontSize}
-    } else if (sizeType) {
+    } else {
       fontSizeHint = {fontSize: Shared.typeToFontSize(sizeType)}
     }
     // in style sheet, so don't apply
-    if (fontSizeHint && fontSizeHint.fontSize === 16) {
+    if (fontSizeHint.fontSize === 16) {
       fontSizeHint = undefined
     }
     const hasContainer = !noContainer && ((onClick && style) || isFontIcon)
@@ -68,18 +79,19 @@ const Icon = React.memo<Props>(
       // handled by a class below
       iconElement = null
     } else {
-      const imgStyle = Styles.collapseStyles([
-        Styles.desktopStyles.noSelect,
-        !hasContainer ? style : {},
-        onClick ? Styles.desktopStyles.clickable : {},
-        props.color ? {color: color} : {},
-      ] as any)
+      const imgStyle = {
+        ...Styles.desktopStyles.noSelect,
+        ...(!hasContainer ? style : {}),
+        ...(onClick ? Styles.desktopStyles.clickable : {}),
+        ...(props.color ? {color: color} : {}),
+      } as React.CSSProperties
 
       iconElement = (
         <img
+          loading={allowLazy ? 'lazy' : undefined}
           className={className}
           draggable={false}
-          ref={hasContainer ? undefined : (ref as any)}
+          ref={hasContainer ? undefined : imgRef}
           title={hint}
           style={imgStyle}
           onClick={onClick || undefined}
@@ -119,22 +131,26 @@ const Icon = React.memo<Props>(
 
       return (
         <div
-          ref={ref}
-          style={Styles.collapseStyles([
-            // This breaks a couple existing uses. So only apply it when padding
-            // is provided for now. Eventually after we know all uses are fine,
-            // we can remove the padding guard.
-            padding && styles.flex,
-            boxStyle,
-          ])}
+          ref={divRef}
+          style={
+            Styles.collapseStyles([
+              // This breaks a couple existing uses. So only apply it when padding
+              // is provided for now. Eventually after we know all uses are fine,
+              // we can remove the padding guard.
+              padding && styles.flex,
+              boxStyle,
+            ]) as React.CSSProperties
+          }
         >
           <span
             title={hint}
-            style={Styles.collapseStyles([
-              mergedStyle,
-              padding && Shared.paddingStyles[padding],
-              typeof colorStyleName !== 'string' ? {color} : null, // For colors that are not in Styles.globalColors
-            ])}
+            style={
+              Styles.collapseStyles([
+                mergedStyle,
+                padding && Shared.paddingStyles[padding],
+                typeof colorStyleName !== 'string' ? {color} : null, // For colors that are not in Styles.globalColors
+              ]) as React.CSSProperties
+            }
             className={Styles.classNames(
               'icon',
               colorStyleName,
@@ -175,11 +191,14 @@ function iconTypeToSrcSet(type: IconType) {
   return [1, 2, 3].map(mult => imgName(name, ext, imagesDir, mult)).join(', ')
 }
 
-export function iconTypeToImgSet(imgMap: any, targetSize: number): any {
-  const multsMap: any = Shared.getMultsMap(imgMap, targetSize)
-  const sets = Object.keys(multsMap)
+export function iconTypeToImgSet(imgMap: {[key: string]: IconType}, targetSize: number) {
+  const multsMap = Shared.getMultsMap(imgMap, targetSize)
+  const keys = Object.keys(multsMap) as unknown as Array<keyof typeof multsMap>
+  const sets = keys
     .map(mult => {
-      const img: string = imgMap[multsMap[mult]] as string
+      const m = multsMap[mult]
+      if (!m) return null
+      const img: string = imgMap[m] as string
       if (!img) return null
       const url = getAssetPath('images', 'icons', img)
       if (Styles.isDarkMode()) url.replace('icon-', 'icon-dark-')
@@ -190,11 +209,14 @@ export function iconTypeToImgSet(imgMap: any, targetSize: number): any {
   return sets ? `-webkit-image-set(${sets})` : null
 }
 
-export function urlsToImgSet(imgMap: any, targetSize: number): any {
-  const multsMap: any = Shared.getMultsMap(imgMap, targetSize)
-  const sets = Object.keys(multsMap)
+export function urlsToImgSet(imgMap: {[key: number]: string}, targetSize: number) {
+  const multsMap = Shared.getMultsMap(imgMap, targetSize)
+  const keys = Object.keys(multsMap) as unknown as Array<keyof typeof multsMap>
+  const sets = keys
     .map(mult => {
-      const url = imgMap[multsMap[mult]]
+      const m = multsMap[mult]
+      if (!m) return null
+      const url = imgMap[m]
       if (!url) {
         return null
       }
@@ -203,10 +225,6 @@ export function urlsToImgSet(imgMap: any, targetSize: number): any {
     .filter(Boolean)
     .join(', ')
   return sets ? `-webkit-image-set(${sets})` : null
-}
-
-export function castPlatformStyles(styles: any) {
-  return Shared.castPlatformStyles(styles)
 }
 
 const styles = Styles.styleSheetCreate(() => ({

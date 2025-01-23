@@ -1,45 +1,32 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Styles from '../../styles'
-import * as Kb from '../../common-adapters'
-import * as Types from '../../constants/types/fs'
+import * as Kb from '@/common-adapters'
+import * as T from '@/constants/types'
 import {useFuseClosedSourceConsent} from './hooks'
-import * as FsGen from '../../actions/fs-gen'
-import {fileUIName} from '../../constants/platform'
-import * as Container from '../../util/container'
-import shallowEqual from 'shallowequal'
 
 type Props = {
   mode: 'Icon' | 'Button'
 }
 
 const SFMIPopup = (props: Props) => {
-  const {isEnabling, type} = Container.useSelector(state => {
-    const {driverStatus} = state.fs.sfmi
-    const {type} = driverStatus
-    const isEnabling = type === Types.DriverStatusType.Disabled ? driverStatus.isEnabling : false
-    return {isEnabling, type}
-  }, shallowEqual)
-  const dispatch = Container.useDispatch()
-  const enableDriver = React.useCallback(() => {
-    dispatch(FsGen.createDriverEnable())
-  }, [dispatch])
+  const sfmi = C.useFSState(s => s.sfmi)
+  const driverEnable = C.useFSState(s => s.dispatch.driverEnable)
+  const {driverStatus} = sfmi
+  const {type} = driverStatus
+  const isEnabling = type === T.FS.DriverStatusType.Disabled ? driverStatus.isEnabling : false
+  const enableDriver = React.useCallback(() => driverEnable(), [driverEnable])
   const {canContinue, component: fuseConsentComponent} = useFuseClosedSourceConsent(
-    type === Types.DriverStatusType.Disabled && isEnabling,
+    type === T.FS.DriverStatusType.Disabled && isEnabling,
     undefined,
     undefined
   )
 
   const makePopup = React.useCallback(
     (p: Kb.Popup2Parms) => {
-      const {attachTo, toggleShowingPopup} = p
+      const {attachTo, hidePopup} = p
 
       return (
-        <Kb.Overlay
-          style={styles.popup}
-          attachTo={attachTo}
-          onHidden={toggleShowingPopup}
-          position="bottom right"
-        >
+        <Kb.Overlay style={styles.popup} attachTo={attachTo} onHidden={hidePopup} position="bottom right">
           <Kb.Box
             style={styles.container}
             onClick={e => {
@@ -50,7 +37,7 @@ const SFMIPopup = (props: Props) => {
               <Kb.Icon type="icon-fancy-finder-132-96" />
             </Kb.Box2>
             <Kb.Text type="BodyBig" style={styles.text}>
-              Enable Keybase in {fileUIName}?
+              Enable Keybase in {C.fileUIName}?
             </Kb.Text>
             <Kb.Text type="BodySmall" style={styles.text} center={true}>
               Get access to your files and folders just like you normally do with your local files. It's
@@ -62,7 +49,7 @@ const SFMIPopup = (props: Props) => {
               <Kb.Button
                 type="Success"
                 label="Yes, enable"
-                waiting={type === Types.DriverStatusType.Disabled && isEnabling}
+                waiting={type === T.FS.DriverStatusType.Disabled && isEnabling}
                 disabled={!canContinue}
                 onClick={enableDriver}
               />
@@ -73,31 +60,31 @@ const SFMIPopup = (props: Props) => {
     },
     [canContinue, isEnabling, enableDriver, fuseConsentComponent, type]
   )
-  const {toggleShowingPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
+  const {showPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
 
-  if (type !== Types.DriverStatusType.Disabled) {
+  if (type !== T.FS.DriverStatusType.Disabled) {
     return null
   }
   return (
     <>
       {props.mode === 'Icon' ? (
-        <Kb.WithTooltip tooltip={`Show in ${fileUIName}`}>
+        <Kb.WithTooltip tooltip={`Show in ${C.fileUIName}`}>
           <Kb.Icon
             type="iconfont-finder"
             padding="tiny"
             fontSize={16}
-            color={Styles.globalColors.black_50}
-            hoverColor={Styles.globalColors.black}
-            onClick={toggleShowingPopup}
-            ref={popupAnchor as any}
+            color={Kb.Styles.globalColors.black_50}
+            hoverColor={Kb.Styles.globalColors.black}
+            onClick={showPopup}
+            ref={popupAnchor}
           />
         </Kb.WithTooltip>
       ) : (
         <Kb.Button
           mode="Secondary"
           small={true}
-          label={`Enable ${fileUIName} integration`}
-          onClick={toggleShowingPopup}
+          label={`Enable ${C.fileUIName} integration`}
+          onClick={showPopup}
           ref={popupAnchor}
         />
       )}
@@ -106,37 +93,37 @@ const SFMIPopup = (props: Props) => {
   )
 }
 
-const styles = Styles.styleSheetCreate(() => ({
+const styles = Kb.Styles.styleSheetCreate(() => ({
   buttonBox: {
-    paddingBottom: Styles.globalMargins.tiny,
-    paddingLeft: Styles.globalMargins.small,
-    paddingRight: Styles.globalMargins.small,
-    paddingTop: Styles.globalMargins.small,
+    paddingBottom: Kb.Styles.globalMargins.tiny,
+    paddingLeft: Kb.Styles.globalMargins.small,
+    paddingRight: Kb.Styles.globalMargins.small,
+    paddingTop: Kb.Styles.globalMargins.small,
   },
   container: {
-    ...Styles.globalStyles.flexBoxColumn,
+    ...Kb.Styles.globalStyles.flexBoxColumn,
     width: '100%',
   },
   divider: {
-    marginBottom: Styles.globalMargins.tiny,
-    marginTop: Styles.globalMargins.small,
+    marginBottom: Kb.Styles.globalMargins.tiny,
+    marginTop: Kb.Styles.globalMargins.small,
   },
   fancyFinderIcon: {
-    paddingLeft: Styles.globalMargins.small,
-    paddingRight: Styles.globalMargins.small,
-    paddingTop: Styles.globalMargins.medium,
+    paddingLeft: Kb.Styles.globalMargins.small,
+    paddingRight: Kb.Styles.globalMargins.small,
+    paddingTop: Kb.Styles.globalMargins.medium,
   },
   popup: {
-    backgroundColor: Styles.globalColors.white,
-    marginTop: Styles.globalMargins.tiny,
+    backgroundColor: Kb.Styles.globalColors.white,
+    marginTop: Kb.Styles.globalMargins.tiny,
     overflow: 'visible',
-    padding: Styles.globalMargins.small,
+    padding: Kb.Styles.globalMargins.small,
     width: 260,
   },
   text: {
-    paddingLeft: Styles.globalMargins.small,
-    paddingRight: Styles.globalMargins.small,
-    paddingTop: Styles.globalMargins.tiny,
+    paddingLeft: Kb.Styles.globalMargins.small,
+    paddingRight: Kb.Styles.globalMargins.small,
+    paddingTop: Kb.Styles.globalMargins.tiny,
   },
 }))
 export default SFMIPopup

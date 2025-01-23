@@ -1,7 +1,8 @@
 import * as React from 'react'
-import {StylesCrossPlatform, globalMargins, CustomStyles} from '../styles'
-import {type PastedFile} from '@mattermost/react-native-paste-input'
-import {TextType} from './text'
+import type {globalMargins, CustomStyles} from '@/styles'
+import type {TextType} from './text'
+import type {NativeSyntheticEvent} from 'react-native'
+import type {MeasureDesktop} from './measure-ref'
 
 export type KeyboardType =
   | 'default'
@@ -59,8 +60,7 @@ export type Selection = {
 export type InputStyle = CustomStyles<'padding', {}>
 
 export type Props = {
-  allowImagePaste?: boolean // mobile only
-  onPasteImage?: (error: string | null | undefined, files: Array<PastedFile>) => void // mobile only, if allowImagePaste is on
+  onPasteImage?: (uri: string) => void // mobile only, if allowImagePaste is on
   autoFocus?: boolean
   // Enable if you want this to always have focus (desktop only)
   globalCaptureKeypress?: boolean
@@ -92,20 +92,17 @@ export type Props = {
   dummyInput?: boolean // Only affects mobile
   /* Platform discrepancies */
   // Maps to onSubmitEditing on native
-  onEnterKeyDown?: (event?: React.BaseSyntheticEvent) => void
+  onEnterKeyDown?: (event?: React.KeyboardEvent) => void
   // Desktop only
   allowKeyboardEvents?: boolean // By default keybaord events won't fire in textarea or input elements. Adds 'mousetrap' class to enable keyboard events.
   onClick?: () => void
   onKeyDown?: (event: React.KeyboardEvent) => void
   onKeyUp?: (event: React.KeyboardEvent) => void
+  spellCheck?: boolean
   // Mobile only
   children?: React.ReactNode
   allowFontScaling?: boolean
-  onKeyPress?: (event: {
-    nativeEvent: {
-      key: 'Enter' | 'Backspace' | string
-    }
-  }) => void
+  onKeyPress?: (event: NativeSyntheticEvent<{key: string}>) => void
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'
   autoCorrect?: boolean
   keyboardType?: KeyboardType
@@ -126,35 +123,19 @@ export type Props = {
 // Use this to mix your props with input props like type Props = PropsWithInput<{foo: number}>
 export type PropsWithInput<P> = Props & P
 
-/**
- * Flow does the work of making the default props nullable when instantiating
- * this component, but doesn't go as far as letting the props be
- * actually nullable in the type def. This complicates things when trying
- * to make this compatible with PropsWithInput. So here we split up the
- * internal type of Props from the public API, and 'lie' in this file
- * by claiming that this component takes `Props` when the implementations
- * use `InternalProps`.
- * See more discussion here: https://github.com/facebook/flow/issues/1660
- */
-export type DefaultProps = {
-  keyboardType: KeyboardType
-  textType: TextType
-}
-
 export type TextInfo = {
   text: string
   selection: Selection
 }
 
-export type InternalProps = {} & DefaultProps & Props
+export type InternalProps = Props
 
 declare class PlainInput extends React.Component<Props> {
-  static defaultProps: DefaultProps
   blur: () => void
   clear: () => void
   focus: () => void
   isFocused: () => boolean
-  getSelection: () => Selection | null
+  getSelection: () => Selection | undefined
   get value(): string
 
   /**
@@ -173,6 +154,7 @@ declare class PlainInput extends React.Component<Props> {
    *  calling this.
    **/
   transformText: (fn: (textInfo: TextInfo) => TextInfo, reflectChange?: boolean) => void
-}
 
+  _input: React.RefObject<{getBoundingClientRect?: () => MeasureDesktop}>
+}
 export default PlainInput

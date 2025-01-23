@@ -1,41 +1,15 @@
-import * as Styles from '../styles'
-import type {MetaType, TextType, Background} from './text'
-
-export function defaultColor(backgroundMode: Background | null) {
-  return {
-    get Announcements() {
-      return Styles.globalColors.white
-    },
-    get Documentation() {
-      return Styles.globalColors.white
-    },
-    get HighRisk() {
-      return Styles.globalColors.white
-    },
-    get Information() {
-      return Styles.globalColors.brown_75
-    },
-    get Normal() {
-      return Styles.globalColors.white
-    },
-    get Success() {
-      return Styles.globalColors.white
-    },
-    get Terminal() {
-      return Styles.globalColors.white
-    },
-  }[backgroundMode || 'Normal']
-}
+import * as Styles from '@/styles'
+import type {MetaType, TextType} from './text'
 
 // need to be `undefined` instead of `null` since `null` doesn't ellipsize at
 // all.
-export function lineClamp(lines: number | undefined, mode: string | undefined): Object {
+export function lineClamp(lines: number | undefined, mode: string | undefined): object {
   return {
     ...(lines ? {ellipsizeMode: mode, numberOfLines: lines} : null),
   }
 }
 
-export function fontSizeToSizeStyle(fontSize: number): {fontSize: number; lineHeight: number} | null {
+export function fontSizeToSizeStyle(fontSize: number): {fontSize: number; lineHeight: number} {
   const lineHeight = {
     '13': 17,
     '15': 19,

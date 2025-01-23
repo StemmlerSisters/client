@@ -1,18 +1,20 @@
-import * as Kb from '../../../../../common-adapters'
+import * as Kb from '@/common-adapters'
 import * as React from 'react'
-import * as Styles from '../../../../../styles'
 import type {Props} from './videoimpl'
-import {useRedux} from './use-redux'
+import {useState} from './use-state'
+import {maxWidth, maxHeight} from '../shared'
 
 // its important we use explicit height/width so we never CLS while loading
 const VideoImpl = (p: Props) => {
   const {openFullscreen, allowPlay} = p
-  const {previewURL, height, width, url, videoDuration} = useRedux()
+  const {previewURL, height, width, url, videoDuration} = useState()
   const [showPoster, setShowPoster] = React.useState(true)
+  const [lastUrl, setLastUrl] = React.useState(url)
 
-  React.useEffect(() => {
+  if (lastUrl !== url) {
+    setLastUrl(url)
     setShowPoster(true)
-  }, [url])
+  }
 
   const onPress = React.useCallback(() => {
     setShowPoster(false)
@@ -27,7 +29,7 @@ const VideoImpl = (p: Props) => {
 
   return showPoster ? (
     <div onClick={onPress} style={styles.posterContainer}>
-      <Kb.Image src={previewURL} style={{height, width}} />
+      <Kb.Image2 src={previewURL} style={{height, width}} />
       {allowPlay ? <Kb.Icon type="icon-play-64" style={styles.playButton} /> : null}
       <Kb.Box2 direction="vertical" style={styles.durationContainer}>
         <Kb.Text type="BodyTinyBold" style={styles.durationText}>
@@ -46,18 +48,18 @@ const VideoImpl = (p: Props) => {
       preload="none"
       controls={true}
       playsInline={true}
-      controlsList="nodownload nofullscreen noremoteplayback"
-      style={styles.video as any}
+      controlsList="nodownload noremoteplayback nofullscreen"
+      style={Kb.Styles.castStyleDesktop(styles.video)}
     >
       <source src={url} />
     </video>
   )
 }
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
-      downloadIcon: Styles.platformStyles({
+      downloadIcon: Kb.Styles.platformStyles({
         isElectron: {
           display: 'inline-flex',
           opacity: 0.75,
@@ -66,20 +68,20 @@ const styles = Styles.styleSheetCreate(
       }),
       durationContainer: {
         alignSelf: 'flex-end',
-        backgroundColor: Styles.globalColors.black_50,
+        backgroundColor: Kb.Styles.globalColors.black_50,
         borderRadius: 2,
-        bottom: Styles.globalMargins.tiny,
+        bottom: Kb.Styles.globalMargins.tiny,
         overflow: 'hidden',
         padding: 1,
         position: 'absolute',
-        right: Styles.globalMargins.tiny,
+        right: Kb.Styles.globalMargins.tiny,
       },
       durationText: {
-        color: Styles.globalColors.white,
+        color: Kb.Styles.globalColors.white,
         paddingLeft: 3,
         paddingRight: 3,
       },
-      infoIcon: Styles.platformStyles({
+      infoIcon: Kb.Styles.platformStyles({
         isElectron: {
           display: 'inline-flex',
           opacity: 0.75,
@@ -87,7 +89,7 @@ const styles = Styles.styleSheetCreate(
         },
       }),
       link: {
-        color: Styles.globalColors.black_50,
+        color: Kb.Styles.globalColors.black_50,
         flexGrow: 1,
       },
       playButton: {
@@ -102,16 +104,16 @@ const styles = Styles.styleSheetCreate(
         flexShrink: 1,
         position: 'relative',
       },
-      tipText: {color: Styles.globalColors.white_75},
-      video: Styles.platformStyles({
+      tipText: {color: Kb.Styles.globalColors.white_75},
+      video: Kb.Styles.platformStyles({
         isElectron: {
-          ...Styles.globalStyles.rounded,
-          maxHeight: 320,
-          maxWidth: 320,
+          ...Kb.Styles.globalStyles.rounded,
+          maxHeight,
+          maxWidth,
           objectFit: 'contain',
         },
       }),
-    } as const)
+    }) as const
 )
 
 export default VideoImpl

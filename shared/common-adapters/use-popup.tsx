@@ -1,62 +1,46 @@
 import * as React from 'react'
-
-// The type parameter (optional) is the type of the component that the popup will be attaching to.
-// `popupAnchor` should be passed to that component as its `ref`.
-// deprecated. Adds extra useEffects and won't update the popup if any dependencies change, better to use
-// usePopup2 with a React.useCallback(makePopup)
-export const usePopup = <T extends React.Component<any>>(
-  makePopup: (getAttachmentRef: () => T | null) => React.ReactNode
-) => {
-  const [showingPopup, setShowingPopup] = React.useState(false)
-  const [popup, setPopup] = React.useState<React.ReactNode>(null)
-  const popupAnchor = React.useRef<T | null>(null)
-
-  const toggleShowingPopup = React.useCallback(() => {
-    setShowingPopup(s => !s)
-  }, [setShowingPopup])
-
-  React.useEffect(() => {
-    if (showingPopup === !popup) {
-      setPopup(showingPopup ? makePopup(() => popupAnchor.current) : null)
-    }
-  }, [showingPopup, popup, makePopup])
-
-  return {
-    popup,
-    popupAnchor,
-    setShowingPopup,
-    showingPopup,
-    toggleShowingPopup,
-  }
-}
+import type {MeasureRef} from './measure-ref'
 
 export type Popup2Parms = {
-  attachTo: () => React.Component | null
-  toggleShowingPopup: () => void
+  attachTo?: React.RefObject<MeasureRef>
+  showPopup: () => void
+  hidePopup: () => void
 }
+
+const tooQuick = 100
+
 export const usePopup2 = (makePopup: (p: Popup2Parms) => React.ReactElement | null) => {
   const [showingPopup, setShowingPopup] = React.useState(false)
   const wasShowingPopupRef = React.useRef(false)
   const wasMakePopupRef = React.useRef<(p: Popup2Parms) => React.ReactElement | null>(makePopup)
   const [popup, setPopup] = React.useState<React.ReactNode>(null)
-  const popupAnchor = React.useRef<React.Component | null>(null)
-  const attachTo = React.useCallback(() => popupAnchor.current, [popupAnchor])
+  const popupAnchor = React.useRef<MeasureRef>(null)
+  const attachTo = popupAnchor
+  const lastToggle = React.useRef(0)
 
-  const toggleShowingPopup = React.useCallback(() => {
-    setShowingPopup(s => !s)
+  const hidePopup = React.useCallback(() => {
+    const now = Date.now()
+    if (now - lastToggle.current < tooQuick) {
+      return
+    }
+    lastToggle.current = now
+    setShowingPopup(false)
   }, [setShowingPopup])
+  const showPopup = React.useCallback(() => {
+    const now = Date.now()
+    if (now - lastToggle.current < tooQuick) {
+      return
+    }
+    lastToggle.current = now
+    setShowingPopup(true)
+  }, [setShowingPopup])
+  const togglePopup = showingPopup ? hidePopup : showPopup
 
   if (showingPopup !== wasShowingPopupRef.current || makePopup !== wasMakePopupRef.current) {
     wasShowingPopupRef.current = showingPopup
     wasMakePopupRef.current = makePopup
-    setPopup(showingPopup ? makePopup({attachTo, toggleShowingPopup}) : null)
+    setPopup(showingPopup ? makePopup({attachTo, hidePopup, showPopup}) : null)
   }
 
-  return {
-    popup,
-    popupAnchor,
-    setShowingPopup,
-    showingPopup,
-    toggleShowingPopup,
-  }
+  return {hidePopup, popup, popupAnchor, showPopup, showingPopup, togglePopup}
 }

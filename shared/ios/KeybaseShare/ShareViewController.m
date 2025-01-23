@@ -25,77 +25,37 @@ const BOOL isSimulator = NO;
 
 @implementation ShareViewController
 
-- (NSItemProvider*)firstSatisfiesTypeIdentifierCond:(NSArray*)attachments cond:(BOOL (^)(NSItemProvider*))cond {
-  for (NSItemProvider* a in attachments) {
-    if (cond(a)) {
-      return a;
-    }
-  }
-  return nil;
-}
-
-- (NSMutableArray*)allSatisfiesTypeIdentifierCond:(NSArray*)attachments cond:(BOOL (^)(NSItemProvider*))cond {
-  NSMutableArray* res = [NSMutableArray array];
-  for (NSItemProvider* a in attachments) {
-    if (cond(a)) {
-      [res addObject:a];
-    }
-  }
-  return res;
-}
-
-- (BOOL)isWebURL:(NSItemProvider*)item {
-  // "file URLs" also have type "url", but we want to treat them as files, not text.
-  return (BOOL)([item hasItemConformingToTypeIdentifier:@"public.url"] && ![item hasItemConformingToTypeIdentifier:@"public.file-url"]);
-}
-
-// getSendableAttachments will get a list of messages we want to send from the share attempt. The flow is as follows:
-// - If there is a URL item, we take it and only it.
-// - If there is a text item, we take it and only it.
-// - If there are none of the above, collect all the images and videos.
-// - If we still don't have anything, select only the first item and hope for the best.
-- (NSArray*)getSendableAttachments {
-  NSExtensionItem *input = self.extensionContext.inputItems.firstObject;
-  NSArray* attachments = [input attachments];
-  NSMutableArray* res = [NSMutableArray array];
-  NSItemProvider* item = [self firstSatisfiesTypeIdentifierCond:attachments cond:^(NSItemProvider* a) {
-    return [self isWebURL:a];
-  }];
-  if (item) {
-    [res addObject:item];
-  }
-  if ([res count] == 0) {
-    item = [self firstSatisfiesTypeIdentifierCond:attachments cond:^(NSItemProvider* a) {
-      return (BOOL)([a hasItemConformingToTypeIdentifier:@"public.text"]);
-    }];
-    if (item) {
-      [res addObject:item];
-    }
-  }
-  if ([res count] == 0) {
-    res = [self allSatisfiesTypeIdentifierCond:attachments cond:^(NSItemProvider* a) {
-      return (BOOL)([a hasItemConformingToTypeIdentifier:@"public.image"] || [a hasItemConformingToTypeIdentifier:@"public.movie"]);
-    }];
-  }
-  if([res count] == 0 && attachments.firstObject != nil) {
-    [res addObject:attachments.firstObject];
-  }
-  return res;
-}
-
 - (void)didReceiveMemoryWarning {
   [super didReceiveMemoryWarning];
 }
 
 - (void) openApp {
-  NSURL * url = [NSURL URLWithString:@"keybase://incoming-share"];
+  NSURL *url = [NSURL URLWithString:@"keybase://incoming-share"];
   UIResponder *responder = self;
-  while (responder){
-    if ([responder respondsToSelector: @selector(openURL:)]){
-      [responder performSelector: @selector(openURL:) withObject: url];
-      return;
-    }
-    responder =  [responder nextResponder];
+  while (responder) {
+        if ([responder respondsToSelector: @selector(openURL:)]){
+          @try {
+            // This is needed by ios18+ to function now on the new xcode. This FAILs in the simulator but seems
+            // to work on device
+            NSMethodSignature *signature = [responder methodSignatureForSelector:@selector(openURL:options:completionHandler:)];
+            NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
+            [invocation setTarget:responder];
+            [invocation setSelector:@selector(openURL:options:completionHandler:)];
+            
+            NSDictionary *options = @{};
+            void (^completionHandler)(BOOL success) = nil;
+            
+            [invocation setArgument:&url atIndex:2];
+            [invocation setArgument:&options atIndex:3];
+            [invocation setArgument:&completionHandler atIndex:4];
+            [invocation invoke];
+            return;
+          }
+          @catch (NSException *exception) {
+            NSLog(@"Exception occurred while opening URL to share");
+          }
+        }
+      responder = [responder nextResponder];
   }
 }
 
@@ -108,48 +68,37 @@ const BOOL isSimulator = NO;
 }
 
 - (void)showProgressView {
-  self.alert = [UIAlertController
-                alertControllerWithTitle:@"Working on it"
-                message:@"Preparing content for sharing into Keybase."
-                preferredStyle:UIAlertControllerStyleAlert];
-  UIActivityIndicatorView* spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
-  [spinner setTranslatesAutoresizingMaskIntoConstraints:NO];
-  [self.alert.view addConstraints:@[
-    [NSLayoutConstraint constraintWithItem:spinner
-                                 attribute:NSLayoutAttributeCenterX
-                                 relatedBy:NSLayoutRelationEqual
-                                    toItem:self.alert.view
-                                 attribute:NSLayoutAttributeCenterX
-                                multiplier:1 constant:0],
-    [NSLayoutConstraint constraintWithItem:spinner
-                                 attribute:NSLayoutAttributeCenterY
-                                 relatedBy:NSLayoutRelationEqual
-                                    toItem:self.alert.view
-                                 attribute:NSLayoutAttributeCenterY
-                                multiplier:1 constant:40],
-    [NSLayoutConstraint constraintWithItem:self.alert.view
-                                 attribute:NSLayoutAttributeBottom
-                                 relatedBy:NSLayoutRelationEqual
-                                    toItem:spinner
-                                 attribute:NSLayoutAttributeBottom
-                                multiplier:1 constant:10]
-  ]
-   ];
-  
-  [self.alert.view addSubview:spinner];
+  UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"Working on it"
+                                                                        message:@"\n\nPreparing content for sharing into Keybase."
+                                                                 preferredStyle:UIAlertControllerStyleAlert];
+
+  self.alert = alertController;
+  UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
   [spinner startAnimating];
-  [self presentViewController:self.alert animated:YES completion:nil];
+  spinner.translatesAutoresizingMaskIntoConstraints = NO;
+
+  [alertController.view addSubview:spinner];
+
+  [spinner.centerXAnchor constraintEqualToAnchor:alertController.view.centerXAnchor].active = YES;
+  [spinner.centerYAnchor constraintEqualToAnchor:alertController.view.centerYAnchor constant:-8].active = YES;
+
+  [self presentViewController:alertController animated:YES completion:nil];
 }
 
 - (void) closeProgressView {
   [self.alert dismissViewControllerAnimated:true completion:nil];
 }
 
-- (void)viewDidLoad {
-  [super viewDidLoad];
-  NSExtensionItem *input = self.extensionContext.inputItems.firstObject;
+- (void) viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  
+  NSMutableArray *itemArrs = [NSMutableArray array];
+  for (NSExtensionItem *inputItem in self.extensionContext.inputItems) {
+    [itemArrs addObject:inputItem.attachments];
+  }
+  
   __weak __typeof__(self) weakSelf = self;
-  self.iph = [[ItemProviderHelper alloc] initForShare: true withItems: [self getSendableAttachments] attrString: input.attributedContentText.string completionHandler:^{
+  self.iph = [[ItemProviderHelper alloc] initForShare: true withItems:itemArrs completionHandler:^{
     __typeof__(self) strongSelf = weakSelf;
     if (strongSelf != nil) {
       [strongSelf completeRequestAlreadyInMainThread];

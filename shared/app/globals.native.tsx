@@ -2,21 +2,41 @@
 // >>>>>>>>>>>>>>>>>>>>>>>      DO NOT REORDER ANYTHING in this file      <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 // This is supposed to bootstrap / polyfill / fixup the app. Do NOT add things here or change things unless you really know
 // what's happening
-//
-// Needed for purepack
+import 'fastestsmallesttextencoderdecoder'
+import {encode as btoa, decode as atob} from 'base-64'
+/* eslint-disable */
+// Needs jsc 5.4+
 // @ts-ignore
-globalThis.buffer = global.Buffer = window.Buffer = require('buffer/').Buffer
-// const {NativeModules} = require('react-native')
+if (!Object.hasOwn) {
+  Object.defineProperty(Object, 'hasOwn', {
+    value: function (obj: object, prop: PropertyKey): boolean {
+      return Object.prototype.hasOwnProperty.call(obj, prop)
+    },
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  })
+}
 
-// __STORYBOOK__
-// if we're in storybook mode
-// if (typeof __STORYBOOK__ === 'undefined') {
-//   __STORYBOOK__ = (NativeModules.Storybook && NativeModules.Storybook.isStorybook) || false
-// }
-__STORYBOOK__ = false
+// Needs jsc 5.4+
+// @ts-ignore
+if (!Array.prototype.at) {
+  Object.defineProperty(Array.prototype, 'at', {
+    value: function <T>(this: T[], index: number): T | undefined {
+      if (index < 0) {
+        index = this.length + index
+      }
+      return this[index]
+    },
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  })
+}
 
-// We don't storyshot RN
-__STORYSHOT__ = false
-
+global.btoa = btoa
+global.atob = atob
 __FILE_SUFFIX__ = ''
 __PROFILE__ = false
+__HOT__ = false
+/* eslint-enable */

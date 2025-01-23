@@ -1,66 +1,76 @@
 // Message related constants
-import * as DeviceTypes from '../types/devices'
-import * as FsTypes from '../types/fs'
-import * as RPCChatTypes from '../types/rpc-chat-gen'
-import * as RPCStellarTypes from '../types/rpc-stellar-gen'
-import * as RPCTypes from '../types/rpc-gen'
-import * as TeamConstants from '../teams'
-import * as Types from '../types/chat2'
-import * as WalletConstants from '../wallets'
-import * as WalletTypes from '../types/wallets'
-import HiddenString from '../../util/hidden-string'
-import invert from 'lodash/invert'
-import logger from '../../logger'
-import shallowEqual from 'shallowequal'
+import * as T from '../types'
+import * as C from '..'
+import type * as ConvoConstants from './convostate'
+import HiddenString from '@/util/hidden-string'
+import logger from '@/logger'
 import type * as MessageTypes from '../types/chat2/message'
 import type {ServiceId} from 'util/platforms'
-import type {TypedState} from '../reducer'
-import {assertNever} from '../../util/container'
-import {isMobile} from '../platform'
 import {noConversationIDKey} from '../types/chat2/common'
-import isEqual from 'lodash/isEqual'
 
-export const getMessageStateExtras = (state: TypedState, conversationIDKey: Types.ConversationIDKey) => {
-  const getLastOrdinal = () =>
-    [...(state.chat2.messageOrdinals.get(conversationIDKey) ?? [])].pop() ?? Types.numberToOrdinal(0)
-  const username = state.config.username
-  const devicename = state.config.deviceName ?? ''
-  return {devicename, getLastOrdinal, username}
+const noString = new HiddenString('')
+
+export const isPathHEIC = (path: string) => path.toLowerCase().endsWith('.heic')
+// real image or heic
+export const isImageViewable = (message: T.Chat.Message) => {
+  if (message.type === 'attachment') {
+    if (message.attachmentType === 'image') {
+      // regular image
+      return true
+    }
+    if (message.attachmentType === 'file' && C.isIOS && isPathHEIC(message.fileName)) {
+      return true
+    }
+  }
+  return false
 }
 
-export const getMessageID = (m: RPCChatTypes.UIMessage) => {
+export const getMessageRenderType = (m: T.Immutable<T.Chat.Message>): T.Chat.RenderMessageType => {
+  switch (m.type) {
+    case 'attachment':
+      if (m.inlineVideoPlayable && m.attachmentType !== 'audio') {
+        return 'attachment:video'
+      }
+      // allow heic on ios only
+      if (isImageViewable(m)) {
+        return 'attachment:image'
+      }
+      return `attachment:${m.attachmentType}`
+    default:
+      return m.type
+  }
+}
+export const isMessageWithReactions = (message: T.Chat.Message) => {
+  return (
+    !(
+      message.type === 'placeholder' ||
+      message.type === 'deleted' ||
+      message.type === 'systemJoined' ||
+      message.type === 'systemLeft' ||
+      message.type === 'journeycard'
+    ) &&
+    !message.exploded &&
+    !message.errorReason
+  )
+}
+export const getMessageID = (m: T.RPCChat.UIMessage) => {
   switch (m.state) {
-    case RPCChatTypes.MessageUnboxedState.valid:
-      return m.valid ? m.valid.messageID : null
-    case RPCChatTypes.MessageUnboxedState.error:
-      return m.error ? m.error.messageID : null
-    case RPCChatTypes.MessageUnboxedState.placeholder:
-      return m.placeholder ? m.placeholder.messageID : null
+    case T.RPCChat.MessageUnboxedState.valid:
+      return T.Chat.numberToMessageID(m.valid.messageID)
+    case T.RPCChat.MessageUnboxedState.error:
+      return T.Chat.numberToMessageID(m.error.messageID)
+    case T.RPCChat.MessageUnboxedState.placeholder:
+      return T.Chat.numberToMessageID(m.placeholder.messageID)
     default:
       return null
   }
 }
 
-export const getRequestMessageInfo = (state: TypedState, message: Types.MessageRequestPayment) => {
-  const convMap = state.chat2.accountsInfoMap.get(message.conversationIDKey)
-  const maybeRequestInfo = convMap && convMap.get(message.id)
-  if (!maybeRequestInfo) {
-    return message.requestInfo
-  }
-  if (maybeRequestInfo.type === 'requestInfo') {
-    return maybeRequestInfo
-  }
-  throw new Error(
-    `Found impossible type ${maybeRequestInfo.type} in info meant for requestPayment message. convID: ${message.conversationIDKey} msgID: ${message.id}`
-  )
-}
-
 export const getPaymentMessageInfo = (
-  state: TypedState,
-  message: Types.MessageSendPayment | Types.MessageText
-) => {
-  const convMap = state.chat2.accountsInfoMap.get(message.conversationIDKey)
-  const maybePaymentInfo = convMap && convMap.get(message.id)
+  accountsInfoMap: ConvoConstants.ConvoState['accountsInfoMap'],
+  message: T.Chat.MessageSendPayment | T.Chat.MessageText
+): T.Chat.ChatPaymentInfo | undefined => {
+  const maybePaymentInfo = accountsInfoMap.get(message.id)
   if (!maybePaymentInfo) {
     return message.paymentInfo
   }
@@ -72,32 +82,35 @@ export const getPaymentMessageInfo = (
   )
 }
 
-export const isPendingPaymentMessage = (state: TypedState, message?: Types.Message) => {
+export const isPendingPaymentMessage = (
+  accountsInfoMap: ConvoConstants.ConvoState['accountsInfoMap'],
+  message?: T.Chat.Message
+) => {
   if (message?.type !== 'sendPayment') {
     return false
   }
-  const paymentInfo = getPaymentMessageInfo(state, message)
+  const paymentInfo = getPaymentMessageInfo(accountsInfoMap, message)
   return !!(paymentInfo && paymentInfo.status === 'pending')
 }
 
 // Map service message types to our message types.
-export const serviceMessageTypeToMessageTypes = (t: RPCChatTypes.MessageType): Array<Types.MessageType> => {
+export const serviceMessageTypeToMessageTypes = (t: T.RPCChat.MessageType): Array<T.Chat.MessageType> => {
   switch (t) {
-    case RPCChatTypes.MessageType.text:
+    case T.RPCChat.MessageType.text:
       return ['text']
-    case RPCChatTypes.MessageType.attachment:
+    case T.RPCChat.MessageType.attachment:
       return ['attachment']
-    case RPCChatTypes.MessageType.metadata:
+    case T.RPCChat.MessageType.metadata:
       return ['setDescription']
-    case RPCChatTypes.MessageType.headline:
+    case T.RPCChat.MessageType.headline:
       return ['setChannelname']
-    case RPCChatTypes.MessageType.attachmentuploaded:
+    case T.RPCChat.MessageType.attachmentuploaded:
       return ['attachment']
-    case RPCChatTypes.MessageType.join:
+    case T.RPCChat.MessageType.join:
       return ['systemJoined']
-    case RPCChatTypes.MessageType.leave:
+    case T.RPCChat.MessageType.leave:
       return ['systemLeft']
-    case RPCChatTypes.MessageType.system:
+    case T.RPCChat.MessageType.system:
       return [
         'systemAddedToTeam',
         'systemChangeRetention',
@@ -111,77 +124,50 @@ export const serviceMessageTypeToMessageTypes = (t: RPCChatTypes.MessageType): A
         'systemChangeAvatar',
         'systemNewChannel',
       ]
-    case RPCChatTypes.MessageType.sendpayment:
+    case T.RPCChat.MessageType.sendpayment:
       return ['sendPayment']
-    case RPCChatTypes.MessageType.requestpayment:
+    case T.RPCChat.MessageType.requestpayment:
       return ['requestPayment']
     // mutations and other types we don't store directly
-    case RPCChatTypes.MessageType.none:
-    case RPCChatTypes.MessageType.edit:
-    case RPCChatTypes.MessageType.delete:
-    case RPCChatTypes.MessageType.tlfname:
-    case RPCChatTypes.MessageType.deletehistory:
-    case RPCChatTypes.MessageType.reaction:
-    case RPCChatTypes.MessageType.unfurl:
-    case RPCChatTypes.MessageType.flip:
+    case T.RPCChat.MessageType.none:
+    case T.RPCChat.MessageType.edit:
+    case T.RPCChat.MessageType.delete:
+    case T.RPCChat.MessageType.tlfname:
+    case T.RPCChat.MessageType.deletehistory:
+    case T.RPCChat.MessageType.reaction:
+    case T.RPCChat.MessageType.unfurl:
+    case T.RPCChat.MessageType.flip:
       return []
     default:
       return []
   }
 }
-export const allMessageTypes: Set<Types.MessageType> = new Set([
-  'attachment',
-  'deleted',
-  'requestPayment',
-  'sendPayment',
-  'setChannelname',
-  'setDescription',
-  'systemAddedToTeam',
-  'systemChangeRetention',
-  'systemGitPush',
-  'systemInviteAccepted',
-  'systemJoined',
-  'systemLeft',
-  'systemSBSResolved',
-  'systemSimpleToComplex',
-  'systemChangeAvatar',
-  'systemNewChannel',
-  'systemText',
-  'systemUsersAddedToConversation',
-  'text',
-  'placeholder',
-])
-
-// The types here are askew. It confuses frontend MessageType with protocol MessageType.
-// Placeholder is an example where it doesn't make sense.
-export const getDeletableByDeleteHistory = (state: TypedState) =>
-  (!!state.chat2.staticConfig && state.chat2.staticConfig.deletableByDeleteHistory) || allMessageTypes
 
 type Minimum = {
   author: string
-  conversationIDKey: Types.ConversationIDKey
-  id: Types.MessageID
-  ordinal: Types.Ordinal
+  conversationIDKey: T.Chat.ConversationIDKey
+  id: T.Chat.MessageID
+  ordinal: T.Chat.Ordinal
   timestamp: number
   isDeleteable: boolean
 }
 
 const makeMessageMinimum = {
   author: '',
-  bodySummary: new HiddenString(''),
+  bodySummary: noString,
   conversationIDKey: noConversationIDKey,
-  id: Types.numberToMessageID(0),
+  id: T.Chat.numberToMessageID(0),
   isDeleteable: false,
-  ordinal: Types.numberToOrdinal(0),
+  ordinal: T.Chat.numberToOrdinal(0),
   timestamp: 0,
 }
 
 const makeMessageCommon = {
   ...makeMessageMinimum,
   deviceName: '',
-  deviceType: 'mobile' as DeviceTypes.DeviceType,
+  deviceType: 'mobile' as T.Devices.DeviceType,
   hasBeenEdited: false,
-  outboxID: Types.stringToOutboxID(''),
+  outboxID: T.Chat.stringToOutboxID(''),
 }
 
 const makeMessageCommonNoDeleteNoEdit = {
@@ -209,8 +195,8 @@ export const makeMessageJourneycard = (
   m?: Partial<MessageTypes.MessageJourneycard>
 ): MessageTypes.MessageJourneycard => ({
   ...makeMessageMinimum,
-  cardType: RPCChatTypes.JourneycardType.welcome,
-  highlightMsgID: Types.numberToMessageID(0),
+  cardType: T.RPCChat.JourneycardType.welcome,
+  highlightMsgID: T.Chat.numberToMessageID(0),
   openTeam: false,
   type: 'journeycard',
   ...m,
@@ -227,21 +213,15 @@ export const makeMessageDeleted = (
 export const makeMessageText = (m?: Partial<MessageTypes.MessageText>): MessageTypes.MessageText => ({
   ...makeMessageCommon,
   ...makeMessageExplodable,
-  decoratedText: null,
-  flipGameID: null,
-  inlinePaymentIDs: null,
   inlinePaymentSuccessful: false,
   isDeleteable: true,
   isEditable: true,
-  mentionsAt: new Set(),
+  mentionsAt: undefined,
   mentionsChannel: 'none',
-  mentionsChannelName: new Map(),
-  paymentInfo: null,
-  reactions: new Map(),
-  replyTo: null,
-  text: new HiddenString(''),
+  reactions: undefined,
+  text: noString,
   type: 'text',
-  unfurls: new Map(),
+  unfurls: undefined,
   ...m,
 })
 
@@ -251,34 +231,27 @@ export const makeMessageAttachment = (
   ...makeMessageCommon,
   ...makeMessageExplodable,
   attachmentType: 'file',
-  audioAmps: [],
+  audioAmps: undefined,
   audioDuration: 0,
-  decoratedText: null,
-  downloadPath: null,
   fileName: '',
   fileSize: 0,
   fileType: '',
   fileURL: '',
   fileURLCached: false,
+  fullHeight: 0,
+  fullWidth: 0,
   inlineVideoPlayable: false,
   isCollapsed: false,
   isDeleteable: true,
   isEditable: true,
-  mentionsAt: new Set(),
-  mentionsChannel: 'none',
-  mentionsChannelName: new Map(),
   previewHeight: 0,
-  previewTransferState: null,
   previewURL: '',
   previewWidth: 0,
-  reactions: new Map(),
+  reactions: undefined,
   showPlayButton: false,
   title: '',
-  transferErrMsg: null,
   transferProgress: 0,
-  transferState: null,
   type: 'attachment',
-  videoDuration: null,
   ...m,
 })
 
@@ -300,10 +273,9 @@ export const makeMessageRequestPayment = (
   m?: Partial<MessageTypes.MessageRequestPayment>
 ): MessageTypes.MessageRequestPayment => ({
   ...makeMessageCommon,
-  note: new HiddenString(''),
-  reactions: new Map(),
+  note: noString,
+  reactions: undefined,
   requestID: '',
-  requestInfo: null,
   type: 'requestPayment',
   ...m,
 })
@@ -311,16 +283,16 @@ export const makeMessageRequestPayment = (
 export const makeChatPaymentInfo = (
   m?: Partial<MessageTypes.ChatPaymentInfo>
 ): MessageTypes.ChatPaymentInfo => ({
-  accountID: WalletTypes.noAccountID,
+  accountID: T.Wallets.noAccountID,
   amountDescription: '',
   delta: 'none',
   fromUsername: '',
   issuerDescription: '',
-  note: new HiddenString(''),
-  paymentID: WalletTypes.noPaymentID,
+  note: noString,
+  paymentID: T.Wallets.noPaymentID,
   showCancel: false,
   sourceAmount: '',
-  sourceAsset: WalletConstants.emptyAssetDescription,
+  sourceAsset: C.Wallets.emptyAssetDescription,
   status: 'none',
   statusDescription: '',
   statusDetail: '',
@@ -335,8 +307,7 @@ export const makeMessageSendPayment = (
   m?: Partial<MessageTypes.MessageSendPayment>
 ): MessageTypes.MessageSendPayment => ({
   ...makeMessageCommon,
-  paymentInfo: null,
-  reactions: new Map(),
+  reactions: undefined,
   type: 'sendPayment',
   ...m,
 })
@@ -345,8 +316,8 @@ const makeMessageSystemJoined = (
   m?: Partial<MessageTypes.MessageSystemJoined>
 ): MessageTypes.MessageSystemJoined => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  joiners: [],
-  leavers: [],
+  joiners: undefined,
+  leavers: undefined,
   type: 'systemJoined',
   ...m,
 })
@@ -365,8 +336,8 @@ const makeMessageSystemAddedToTeam = (
   ...makeMessageCommonNoDeleteNoEdit,
   addee: '',
   adder: '',
-  bulkAdds: [],
-  reactions: new Map(),
+  bulkAdds: undefined,
+  reactions: undefined,
   role: 'none',
   team: '',
   type: 'systemAddedToTeam',
@@ -382,7 +353,7 @@ const makeMessageSystemInviteAccepted = (
   inviteType: 'none',
   invitee: '',
   inviter: '',
-  reactions: new Map(),
+  reactions: undefined,
   role: 'none',
   team: '',
   type: 'systemInviteAccepted',
@@ -393,10 +364,9 @@ export const makeMessageSystemSBSResolved = (
   m?: Partial<MessageTypes.MessageSystemSBSResolved>
 ): MessageTypes.MessageSystemSBSResolved => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  assertionService: null,
   assertionUsername: '',
   prover: '',
-  reactions: new Map(),
+  reactions: undefined,
   type: 'systemSBSResolved',
   ...m,
 })
@@ -405,7 +375,7 @@ const makeMessageSystemSimpleToComplex = (
   m?: Partial<MessageTypes.MessageSystemSimpleToComplex>
 ): MessageTypes.MessageSystemSimpleToComplex => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  reactions: new Map(),
+  reactions: undefined,
   team: '',
   type: 'systemSimpleToComplex',
   ...m,
@@ -415,8 +385,8 @@ export const makeMessageSystemText = (
   m?: Partial<MessageTypes.MessageSystemText>
 ): MessageTypes.MessageSystemText => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  reactions: new Map(),
-  text: new HiddenString(''),
+  reactions: undefined,
+  text: noString,
   type: 'systemText',
   ...m,
 })
@@ -426,11 +396,17 @@ export const makeMessageSystemCreateTeam = (
 ): MessageTypes.MessageSystemCreateTeam => ({
   ...makeMessageCommonNoDeleteNoEdit,
   creator: '',
-  reactions: new Map(),
+  reactions: undefined,
   team: '',
   type: 'systemCreateTeam',
   ...m,
 })
+
+const branchRefPrefix = 'refs/heads/'
+export const systemGitBranchName = (ref: T.RPCGen.GitRefMetadata) => {
+  const {refName} = ref
+  return refName.startsWith(branchRefPrefix) ? refName.substring(branchRefPrefix.length) : refName
+}
 
 export const makeMessageSystemGitPush = (
   m?: Partial<MessageTypes.MessageSystemGitPush>
@@ -438,8 +414,8 @@ export const makeMessageSystemGitPush = (
   ...makeMessageCommonNoDeleteNoEdit,
   pushType: 0,
   pusher: '',
-  reactions: new Map(),
-  refs: [],
+  reactions: undefined,
+  refs: undefined,
   repo: '',
   repoID: '',
   team: '',
@@ -451,16 +427,16 @@ const makeMessageSetDescription = (
   m?: Partial<MessageTypes.MessageSetDescription>
 ): MessageTypes.MessageSetDescription => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  newDescription: new HiddenString(''),
-  reactions: new Map(),
+  newDescription: noString,
+  reactions: undefined,
   type: 'setDescription',
   ...m,
 })
 
 const makeMessagePin = (m?: Partial<MessageTypes.MessagePin>): MessageTypes.MessagePin => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  pinnedMessageID: 0,
-  reactions: new Map(),
+  pinnedMessageID: T.Chat.numberToMessageID(0),
+  reactions: undefined,
   type: 'pin',
   ...m,
 })
@@ -470,7 +446,7 @@ const makeMessageSetChannelname = (
 ): MessageTypes.MessageSetChannelname => ({
   ...makeMessageCommonNoDeleteNoEdit,
   newChannelname: '',
-  reactions: new Map(),
+  reactions: undefined,
   type: 'setChannelname',
   ...m,
 })
@@ -482,8 +458,7 @@ const makeMessageSystemChangeRetention = (
   isInherit: false,
   isTeam: false,
   membersType: 0,
-  policy: null,
-  reactions: new Map(),
+  reactions: undefined,
   type: 'systemChangeRetention',
   user: '',
   you: '',
@@ -494,7 +469,7 @@ const makeMessageSystemUsersAddedToConversation = (
   m?: Partial<MessageTypes.MessageSystemUsersAddedToConversation>
 ): MessageTypes.MessageSystemUsersAddedToConversation => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  reactions: new Map(),
+  reactions: undefined,
   type: 'systemUsersAddedToConversation',
   usernames: [],
   ...m,
@@ -504,7 +479,7 @@ const makeMessageSystemChangeAvatar = (
   m?: Partial<MessageTypes.MessageSystemChangeAvatar>
 ): MessageTypes.MessageSystemChangeAvatar => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  reactions: new Map(),
+  reactions: undefined,
   team: '',
   type: 'systemChangeAvatar',
   user: '',
@@ -515,8 +490,8 @@ const makeMessageSystemNewChannel = (
   m?: Partial<MessageTypes.MessageSystemNewChannel>
 ): MessageTypes.MessageSystemNewChannel => ({
   ...makeMessageCommonNoDeleteNoEdit,
-  reactions: new Map(),
-  text: '',
+  reactions: undefined,
+  text: new HiddenString(''),
   type: 'systemNewChannel',
   ...m,
 })
@@ -528,21 +503,21 @@ export const makeReaction = (m?: Partial<MessageTypes.Reaction>): MessageTypes.R
 })
 
 export const uiRequestInfoToChatRequestInfo = (
-  r: RPCChatTypes.UIRequestInfo | null
-): MessageTypes.ChatRequestInfo | null => {
+  r?: T.RPCChat.UIRequestInfo
+): MessageTypes.ChatRequestInfo | undefined => {
   if (!r) {
-    return null
+    return
   }
-  let asset: WalletTypes.Asset = 'native'
+  let asset: T.Wallets.Asset = 'native'
   let currencyCode = ''
   if (!(r.asset || r.currency)) {
     logger.error('Received UIRequestInfo with no asset or currency code')
-    return null
+    return
   } else if (r.asset && r.asset.type !== 'native') {
     const assetResult = r.asset
-    asset = WalletConstants.makeAssetDescription({
+    asset = C.Wallets.makeAssetDescription({
       code: assetResult.code,
-      issuerAccountID: WalletTypes.stringToAccountID(assetResult.issuer),
+      issuerAccountID: assetResult.issuer,
       issuerName: assetResult.issuerName,
       issuerVerifiedDomain: assetResult.verifiedDomain,
     })
@@ -554,32 +529,32 @@ export const uiRequestInfoToChatRequestInfo = (
     amount: r.amount,
     amountDescription: r.amountDescription,
     asset,
-    canceled: r.status === RPCStellarTypes.RequestStatus.canceled,
+    canceled: r.status === T.RPCStellar.RequestStatus.canceled,
     currencyCode,
-    done: r.status === RPCStellarTypes.RequestStatus.done,
+    done: r.status === T.RPCStellar.RequestStatus.done,
     worthAtRequestTime: r.worthAtRequestTime,
   })
 }
 
 export const uiPaymentInfoToChatPaymentInfo = (
-  ps: Array<RPCChatTypes.UIPaymentInfo> | null
-): MessageTypes.ChatPaymentInfo | null => {
+  ps?: ReadonlyArray<T.RPCChat.UIPaymentInfo>
+): MessageTypes.ChatPaymentInfo | undefined => {
   if (!ps || ps.length !== 1) {
-    return null
+    return undefined
   }
-  const p = ps[0]
-  const serviceStatus = WalletConstants.statusSimplifiedToString[p.status]
+  const p = ps[0]!
+  const serviceStatus = C.Wallets.statusSimplifiedToString[p.status]
   return makeChatPaymentInfo({
-    accountID: p.accountID ? WalletTypes.stringToAccountID(p.accountID) : WalletTypes.noAccountID,
+    accountID: p.accountID ?? T.Wallets.noAccountID,
     amountDescription: p.amountDescription,
-    delta: WalletConstants.balanceDeltaToString[p.delta],
+    delta: C.Wallets.balanceDeltaToString[p.delta],
     fromUsername: p.fromUsername,
     issuerDescription: p.issuerDescription,
     note: new HiddenString(p.note),
-    paymentID: WalletTypes.rpcPaymentIDToPaymentID(p.paymentID),
+    paymentID: p.paymentID,
     showCancel: p.showCancel,
     sourceAmount: p.sourceAmount,
-    sourceAsset: WalletConstants.makeAssetDescription({
+    sourceAsset: C.Wallets.makeAssetDescription({
       code: p.sourceAsset.code,
       issuerAccountID: p.sourceAsset.issuer,
       issuerName: p.sourceAsset.issuerName,
@@ -594,72 +569,42 @@ export const uiPaymentInfoToChatPaymentInfo = (
   })
 }
 
-export const reactionMapToReactions = (r: RPCChatTypes.UIReactionMap): MessageTypes.Reactions =>
-  new Map(
-    Object.keys(r.reactions || {}).reduce((arr: Array<[string, MessageTypes.ReactionDesc]>, emoji) => {
-      if (r.reactions[emoji]) {
-        arr.push([
-          emoji,
-          {
-            decorated: r.reactions[emoji].decorated,
-            users: new Set(
-              Object.keys(r.reactions[emoji].users).map(username =>
-                makeReaction({
-                  timestamp: r.reactions[emoji].users[username].ctime,
-                  username,
-                })
-              )
-            ),
-          },
-        ])
-      }
-      return arr
-    }, [])
-  )
-
-const channelMentionToMentionsChannel = (channelMention: RPCChatTypes.ChannelMention) => {
-  switch (channelMention) {
-    case RPCChatTypes.ChannelMention.all:
-      return 'all'
-    case RPCChatTypes.ChannelMention.here:
-      return 'here'
-    default:
-      return 'none'
-  }
-}
-
-export const uiMessageEditToMessage = (
-  edit: RPCChatTypes.MessageEdit,
-  valid: RPCChatTypes.UIMessageValid
-) => {
-  const text = new HiddenString(edit.body || '')
-
-  const mentionsAt = new Set(valid.atMentions || [])
-  const mentionsChannel = channelMentionToMentionsChannel(valid.channelMention)
-  const mentionsChannelName: Map<string, Types.ConversationIDKey> = new Map(
-    (valid.channelNameMentions || []).map(men => [men.name, Types.stringToConversationIDKey(men.convID)])
-  )
-
-  return {
-    mentionsAt,
-    mentionsChannel,
-    mentionsChannelName,
-    messageID: edit.messageID,
-    text,
-  }
-}
+export const reactionMapToReactions = (r: T.RPCChat.UIReactionMap): undefined | MessageTypes.Reactions =>
+  r.reactions
+    ? new Map(
+        Object.keys(r.reactions).reduce((arr: Array<[string, MessageTypes.ReactionDesc]>, emoji) => {
+          if (r.reactions?.[emoji]) {
+            arr.push([
+              emoji,
+              {
+                decorated: r.reactions[emoji]!.decorated,
+                users: new Set(
+                  Object.keys(r.reactions[emoji]?.users ?? {}).map(username =>
+                    makeReaction({
+                      timestamp: r.reactions?.[emoji]!.users?.[username]?.ctime,
+                      username,
+                    })
+                  )
+                ),
+              },
+            ])
+          }
+          return arr
+        }, [])
+      )
+    : undefined
 
 const uiMessageToSystemMessage = (
   minimum: Minimum,
-  body: RPCChatTypes.MessageSystem,
-  reactions: Map<string, MessageTypes.ReactionDesc>,
-  m: RPCChatTypes.UIMessageValid
-): Types.Message | null => {
+  body: T.RPCChat.MessageSystem,
+  reactions: undefined | ReadonlyMap<string, MessageTypes.ReactionDesc>,
+  m: T.RPCChat.UIMessageValid
+): T.Chat.Message | undefined => {
   switch (body.systemType) {
-    case RPCChatTypes.MessageSystemType.addedtoteam: {
-      const {adder = '', addee = '', team = ''} = body.addedtoteam || {}
-      const roleEnum = body.addedtoteam ? body.addedtoteam.role : undefined
-      const role = roleEnum ? TeamConstants.teamRoleByEnum[roleEnum] : 'none'
+    case T.RPCChat.MessageSystemType.addedtoteam: {
+      const {adder = '', addee = '', team = ''} = body.addedtoteam
+      const roleEnum = body.addedtoteam.role
+      const role = roleEnum ? C.Teams.teamRoleByEnum[roleEnum] : 'none'
       const bulkAdds = body.addedtoteam.bulkAdds || []
       return makeMessageSystemAddedToTeam({
         ...minimum,
@@ -671,29 +616,29 @@ const uiMessageToSystemMessage = (
         team,
       })
     }
-    case RPCChatTypes.MessageSystemType.inviteaddedtoteam: {
-      const inviteaddedtoteam = body.inviteaddedtoteam || ({} as RPCChatTypes.MessageSystemInviteAddedToTeam)
+    case T.RPCChat.MessageSystemType.inviteaddedtoteam: {
+      const inviteaddedtoteam = body.inviteaddedtoteam
       const invitee = inviteaddedtoteam.invitee || 'someone'
-      const role = TeamConstants.teamRoleByEnum[inviteaddedtoteam.role] || 'none'
+      const role = C.Teams.teamRoleByEnum[inviteaddedtoteam.role]
       const adder = inviteaddedtoteam.adder || 'someone'
       const inviter = inviteaddedtoteam.inviter || 'someone'
       const team = inviteaddedtoteam.team || '???'
-      const iType = inviteaddedtoteam.inviteType || RPCTypes.TeamInviteCategory.unknown
+      const iType = inviteaddedtoteam.inviteType || T.RPCGen.TeamInviteCategory.unknown
       let inviteType: MessageTypes.MessageSystemInviteAccepted['inviteType']
       switch (iType) {
-        case RPCTypes.TeamInviteCategory.unknown:
+        case T.RPCGen.TeamInviteCategory.unknown:
           inviteType = 'unknown'
           break
-        case RPCTypes.TeamInviteCategory.keybase:
+        case T.RPCGen.TeamInviteCategory.keybase:
           inviteType = 'keybase'
           break
-        case RPCTypes.TeamInviteCategory.email:
+        case T.RPCGen.TeamInviteCategory.email:
           inviteType = 'email'
           break
-        case RPCTypes.TeamInviteCategory.sbs:
+        case T.RPCGen.TeamInviteCategory.sbs:
           inviteType = 'sbs'
           break
-        case RPCTypes.TeamInviteCategory.seitan:
+        case T.RPCGen.TeamInviteCategory.seitan:
           inviteType = 'text'
           break
         default:
@@ -711,17 +656,17 @@ const uiMessageToSystemMessage = (
         team,
       })
     }
-    case RPCChatTypes.MessageSystemType.complexteam: {
-      const {team = ''} = body.complexteam || {}
+    case T.RPCChat.MessageSystemType.complexteam: {
+      const {team = ''} = body.complexteam
       return makeMessageSystemSimpleToComplex({
         ...minimum,
         reactions,
         team,
       })
     }
-    case RPCChatTypes.MessageSystemType.sbsresolve: {
-      const {prover = '???', assertionUsername = '???'} = body.sbsresolve || {}
-      const assertionService = body.sbsresolve && (body.sbsresolve.assertionService as ServiceId)
+    case T.RPCChat.MessageSystemType.sbsresolve: {
+      const {prover = '???', assertionUsername = '???'} = body.sbsresolve
+      const assertionService = body.sbsresolve.assertionService as ServiceId
       return makeMessageSystemSBSResolved({
         ...minimum,
         assertionService,
@@ -730,8 +675,8 @@ const uiMessageToSystemMessage = (
         reactions,
       })
     }
-    case RPCChatTypes.MessageSystemType.createteam: {
-      const {team = '???', creator = '????'} = body.createteam || {}
+    case T.RPCChat.MessageSystemType.createteam: {
+      const {team = '???', creator = '????'} = body.createteam
       return makeMessageSystemCreateTeam({
         creator,
         reactions,
@@ -739,7 +684,7 @@ const uiMessageToSystemMessage = (
         ...minimum,
       })
     }
-    case RPCChatTypes.MessageSystemType.gitpush: {
+    case T.RPCChat.MessageSystemType.gitpush: {
       const {
         team = '???',
         pushType = 0,
@@ -747,7 +692,7 @@ const uiMessageToSystemMessage = (
         repoName: repo = '???',
         repoID = '???',
         refs = [],
-      } = body.gitpush || {}
+      } = body.gitpush
       return makeMessageSystemGitPush({
         ...minimum,
         pushType,
@@ -759,8 +704,8 @@ const uiMessageToSystemMessage = (
         team,
       })
     }
-    case RPCChatTypes.MessageSystemType.changeavatar: {
-      const {user = '???', team = '???'} = body.changeavatar || {}
+    case T.RPCChat.MessageSystemType.changeavatar: {
+      const {user = '???', team = '???'} = body.changeavatar
       return makeMessageSystemChangeAvatar({
         ...minimum,
         reactions,
@@ -768,19 +713,16 @@ const uiMessageToSystemMessage = (
         user,
       })
     }
-    case RPCChatTypes.MessageSystemType.newchannel: {
+    case T.RPCChat.MessageSystemType.newchannel: {
       return m.decoratedTextBody
         ? makeMessageSystemNewChannel({
             ...minimum,
             reactions,
-            text: m.decoratedTextBody,
+            text: new HiddenString(m.decoratedTextBody),
           })
-        : null
+        : undefined
     }
-    case RPCChatTypes.MessageSystemType.changeretention: {
-      if (!body.changeretention) {
-        return null
-      }
+    case T.RPCChat.MessageSystemType.changeretention: {
       return makeMessageSystemChangeRetention({
         ...minimum,
         isInherit: body.changeretention.isInherit,
@@ -791,9 +733,9 @@ const uiMessageToSystemMessage = (
         user: body.changeretention.user,
       })
     }
-    case RPCChatTypes.MessageSystemType.bulkaddtoconv: {
-      if (!body.bulkaddtoconv || !body.bulkaddtoconv.usernames) {
-        return null
+    case T.RPCChat.MessageSystemType.bulkaddtoconv: {
+      if (!body.bulkaddtoconv.usernames) {
+        return undefined
       }
       return makeMessageSystemUsersAddedToConversation({
         ...minimum,
@@ -803,19 +745,16 @@ const uiMessageToSystemMessage = (
     }
 
     default:
-      return null
+      return
   }
 }
 
-export const isVideoAttachment = (message: Types.MessageAttachment) => message.fileType.startsWith('video')
+export const isVideoAttachment = (message: T.Chat.MessageAttachment) => message.fileType.startsWith('video')
 
 export const maxAmpsLength = 60
-export const previewSpecs = (
-  preview: RPCChatTypes.AssetMetadata | null,
-  full: RPCChatTypes.AssetMetadata | null
-) => {
-  const res: Types.PreviewSpec = {
-    attachmentType: 'file' as Types.AttachmentType,
+export const previewSpecs = (preview?: T.RPCChat.AssetMetadata, full?: T.RPCChat.AssetMetadata) => {
+  const res: T.Chat.PreviewSpec = {
+    attachmentType: 'file' as T.Chat.AttachmentType,
     audioAmps: [],
     audioDuration: 0,
     height: 0,
@@ -825,22 +764,23 @@ export const previewSpecs = (
   if (!preview) {
     return res
   }
-  if (preview.assetType === RPCChatTypes.AssetMetadataType.image && preview.image) {
+  if (preview.assetType === T.RPCChat.AssetMetadataType.image) {
     res.height = preview.image.height
     res.width = preview.image.width
-    if (full && full.assetType === RPCChatTypes.AssetMetadataType.video && full.video && full.video.isAudio) {
+    if (full && full.assetType === T.RPCChat.AssetMetadataType.video && full.video.isAudio) {
       res.attachmentType = 'audio'
       res.audioDuration = full.video.durationMs
     } else {
       res.attachmentType = 'image'
       // full is a video but preview is an image?
-      if (full && full.assetType === RPCChatTypes.AssetMetadataType.video) {
+      if (full && full.assetType === T.RPCChat.AssetMetadataType.video) {
         res.showPlayButton = true
       }
     }
-    res.audioAmps = preview.image.audioAmps || []
-    res.audioAmps.length = Math.min(res.audioAmps.length, maxAmpsLength)
-  } else if (preview.assetType === RPCChatTypes.AssetMetadataType.video && preview.video) {
+    const aa = [...(preview.image.audioAmps ?? [])]
+    aa.length = Math.min(aa.length, maxAmpsLength)
+    res.audioAmps = aa
+  } else if (preview.assetType === T.RPCChat.AssetMetadataType.video) {
     res.height = preview.video.height
     res.width = preview.video.width
     res.attachmentType = 'image'
@@ -848,55 +788,42 @@ export const previewSpecs = (
   return res
 }
 
-const successfulInlinePaymentStatuses = ['completed', 'claimable']
-export const hasSuccessfulInlinePayments = (state: TypedState, message: Types.Message): boolean => {
-  if (message.type !== 'text' || !message.inlinePaymentIDs) {
-    return false
-  }
-  return (
-    message.inlinePaymentSuccessful ||
-    message.inlinePaymentIDs.some(id => {
-      const s = state.chat2.paymentStatusMap.get(id)
-      return !!s && successfulInlinePaymentStatuses.includes(s.status)
-    })
-  )
-}
-
-export const getMapUnfurl = (message: Types.Message): RPCChatTypes.UnfurlGenericDisplay | null => {
-  const unfurls = message.type === 'text' && message.unfurls.size ? [...message.unfurls.values()] : null
+export const getMapUnfurl = (message: T.Chat.Message): T.RPCChat.UnfurlGenericDisplay | undefined => {
+  const unfurls = message.type === 'text' && message.unfurls?.size ? [...message.unfurls.values()] : null
   const mapInfo = unfurls?.[0]?.unfurl
-    ? unfurls[0].unfurl.unfurlType === RPCChatTypes.UnfurlType.generic &&
-      unfurls[0].unfurl.generic?.mapInfo &&
+    ? unfurls[0].unfurl.unfurlType === T.RPCChat.UnfurlType.generic &&
+      unfurls[0].unfurl.generic.mapInfo &&
       unfurls[0].unfurl.generic
-    : null
-  return mapInfo || null
+    : undefined
+  return mapInfo || undefined
 }
 
+const successfulInlinePaymentStatuses = ['completed', 'claimable']
 const validUIMessagetoMessage = (
-  conversationIDKey: Types.ConversationIDKey,
-  m: RPCChatTypes.UIMessageValid,
+  conversationIDKey: T.Chat.ConversationIDKey,
+  m: T.RPCChat.UIMessageValid,
   currentUsername: string,
-  getLastOrdinal: () => Types.Ordinal,
+  getLastOrdinal: () => T.Chat.Ordinal,
   currentDeviceName: string
-) => {
+): MessageTypes.Message | undefined => {
   const minimum = {
     author: m.senderUsername,
     botUsername: m.botUsername || undefined,
     conversationIDKey,
-    id: Types.numberToMessageID(m.messageID),
+    id: T.Chat.numberToMessageID(m.messageID),
     isDeleteable: m.isDeleteable,
-    ordinal: Types.numberToOrdinal(m.messageID),
+    ordinal: T.Chat.numberToOrdinal(m.messageID),
     timestamp: m.ctime,
   }
 
   const reactions = reactionMapToReactions(m.reactions)
   const common = {
     ...minimum,
-    bodySummary: new HiddenString(m.bodySummary),
+    bodySummary: m.bodySummary ? new HiddenString(m.bodySummary) : noString,
     deviceName: m.senderDeviceName,
     deviceRevokedAt: m.senderDeviceRevokedAt || undefined,
-    deviceType: DeviceTypes.stringToDeviceType(m.senderDeviceType),
-    outboxID: m.outboxID ? Types.stringToOutboxID(m.outboxID) : undefined,
+    deviceType: T.Devices.stringToDeviceType(m.senderDeviceType),
+    outboxID: m.outboxID ? T.Chat.stringToOutboxID(m.outboxID) : undefined,
     reactions,
   }
   const explodable = {
@@ -912,19 +839,19 @@ const validUIMessagetoMessage = (
   }
 
   switch (m.messageBody.messageType) {
-    case RPCChatTypes.MessageType.flip:
-    case RPCChatTypes.MessageType.text: {
+    case T.RPCChat.MessageType.flip:
+    case T.RPCChat.MessageType.text: {
       let rawText: string
-      let payments: Array<RPCChatTypes.TextPayment> | null = null
+      let payments: ReadonlyArray<T.RPCChat.TextPayment> | undefined
       switch (m.messageBody.messageType) {
-        case RPCChatTypes.MessageType.flip:
+        case T.RPCChat.MessageType.flip:
           rawText = m.messageBody.flip.text
           break
-        case RPCChatTypes.MessageType.text:
+        case T.RPCChat.MessageType.text:
           {
             const messageText = m.messageBody.text
             rawText = messageText.body
-            payments = messageText.payments || null
+            payments = messageText.payments || undefined
           }
           break
         default:
@@ -933,84 +860,85 @@ const validUIMessagetoMessage = (
       return makeMessageText({
         ...common,
         ...explodable,
-        decoratedText: m.decoratedTextBody ? new HiddenString(m.decoratedTextBody) : null,
-        flipGameID: m.flipGameID,
+        decoratedText: m.decoratedTextBody ? new HiddenString(m.decoratedTextBody) : undefined,
+        flipGameID: m.flipGameID ?? undefined,
         hasBeenEdited: m.superseded,
         inlinePaymentIDs: payments
           ? payments.reduce((arr: Array<string>, p) => {
-              if (p.result.resultTyp === RPCChatTypes.TextPaymentResultTyp.sent) {
-                const s = WalletTypes.rpcPaymentIDToPaymentID(p.result.sent)
+              if (p.result.resultTyp === T.RPCChat.TextPaymentResultTyp.sent) {
+                const s = p.result.sent
                 s && arr.push(s)
               }
               return arr
             }, [])
-          : null,
+          : undefined,
         inlinePaymentSuccessful: m.paymentInfos
           ? m.paymentInfos.some(pi => successfulInlinePaymentStatuses.includes(pi.statusDescription))
           : false,
         isEditable: m.isEditable,
-        mentionsAt: new Set(m.atMentions || []),
-        mentionsChannel: channelMentionToMentionsChannel(m.channelMention),
-        mentionsChannelName: new Map(
-          (m.channelNameMentions || []).map(men => [men.name, Types.stringToConversationIDKey(men.convID)])
-        ),
         replyTo: m.replyTo
-          ? uiMessageToMessage(
+          ? (uiMessageToMessage(
               conversationIDKey,
               m.replyTo,
               currentUsername,
               getLastOrdinal,
               currentDeviceName
-            )
-          : null,
+            ) as T.Chat.MessageReplyTo)
+          : undefined,
         text: new HiddenString(rawText),
-        unfurls: new Map((m.unfurls || []).map(u => [u.url, u])),
+        unfurls: m.unfurls ? new Map(m.unfurls.map(u => [u.url, u])) : undefined,
       })
     }
-    case RPCChatTypes.MessageType.attachmentuploaded: // fallthrough
-    case RPCChatTypes.MessageType.attachment: {
+    case T.RPCChat.MessageType.attachmentuploaded: // fallthrough
+    case T.RPCChat.MessageType.attachment: {
       // The attachment flow is currently pretty complicated. We'll have core do more of this so it'll be simpler but for now
       // 1. On thread load we only get attachment type. It'll have full data
       // 2. On incoming we get attachment first (placeholder), then we get the full data (attachmentuploaded)
       // 3. When we send we place a pending attachment, then get the real attachment then attachmentuploaded
       // We treat all these like a pending text, so any data-less thing will have no message id and map to the same ordinal
-      let attachment: RPCChatTypes.MessageAttachment | RPCChatTypes.MessageAttachmentUploaded | null = null
-      let preview: RPCChatTypes.Asset | null = null
-      let full: RPCChatTypes.Asset | null = null
-      let transferState: 'remoteUploading' | null = null
+      let attachment: T.RPCChat.MessageAttachment | T.RPCChat.MessageAttachmentUploaded | undefined
+      let preview: T.RPCChat.Asset | undefined
+      let full: T.RPCChat.Asset | undefined
+      let transferState: 'remoteUploading' | undefined
 
-      if (m.messageBody.messageType === RPCChatTypes.MessageType.attachment) {
+      if (m.messageBody.messageType === T.RPCChat.MessageType.attachment) {
         attachment = m.messageBody.attachment
-        preview =
-          attachment.preview ||
-          (attachment.previews && attachment.previews.length ? attachment.previews[0] : null)
+        preview = attachment.previews?.[0]
         full = attachment.object
         if (!attachment.uploaded) {
           transferState = 'remoteUploading' as const
         }
-      } else if (m.messageBody.messageType === RPCChatTypes.MessageType.attachmentuploaded) {
+      } else {
         attachment = m.messageBody.attachmentuploaded
-        preview = attachment.previews && attachment.previews.length ? attachment.previews[0] : null
+        preview = attachment.previews?.[0]
         full = attachment.object
-        transferState = null
+        transferState = undefined
       }
 
-      const a = attachment || {object: {filename: undefined, size: undefined, title: undefined}}
+      const a = attachment
       const {filename, title, size} = a.object
 
-      const pre = previewSpecs(preview && preview.metadata, full && full.metadata)
+      const pre = previewSpecs(preview?.metadata, full.metadata)
+
+      let fullHeight = 0
+      let fullWidth = 0
+      if (full.metadata.assetType === T.RPCChat.AssetMetadataType.image) {
+        fullHeight = full.metadata.image.height
+        fullWidth = full.metadata.image.width
+      }
+
       let previewURL = ''
       let fileURL = ''
       let fileType = ''
       let fileURLCached = false
-      let videoDuration: string | null = null
+      let videoDuration: string | undefined
       let inlineVideoPlayable = false
       if (m.assetUrlInfo) {
         previewURL = m.assetUrlInfo.previewUrl
         fileURL = m.assetUrlInfo.fullUrl
         fileType = m.assetUrlInfo.mimeType
         fileURLCached = m.assetUrlInfo.fullUrlCached
-        videoDuration = m.assetUrlInfo.videoDuration || null
+        videoDuration = m.assetUrlInfo.videoDuration ?? undefined
         inlineVideoPlayable = m.assetUrlInfo.inlineVideoPlayable
       }
 
@@ -1020,21 +948,18 @@ const validUIMessagetoMessage = (
         attachmentType: pre.attachmentType,
         audioAmps: pre.audioAmps,
         audioDuration: pre.audioDuration,
-        decoratedText: m.decoratedTextBody ? new HiddenString(m.decoratedTextBody) : null,
+        decoratedText: m.decoratedTextBody ? new HiddenString(m.decoratedTextBody) : undefined,
         fileName: filename,
         fileSize: size,
         fileType,
         fileURL,
         fileURLCached,
+        fullHeight,
+        fullWidth,
         hasBeenEdited: m.superseded,
         inlineVideoPlayable,
         isCollapsed: m.isCollapsed,
         isEditable: m.isEditable,
-        mentionsAt: new Set(m.atMentions || []),
-        mentionsChannel: channelMentionToMentionsChannel(m.channelMention),
-        mentionsChannelName: new Map(
-          (m.channelNameMentions || []).map(men => [men.name, Types.stringToConversationIDKey(men.convID)])
-        ),
         previewHeight: pre.height,
         previewURL,
         previewWidth: pre.width,
@@ -1044,78 +969,75 @@ const validUIMessagetoMessage = (
         videoDuration,
       })
     }
-    case RPCChatTypes.MessageType.join:
+    case T.RPCChat.MessageType.join:
       return makeMessageSystemJoined({
         ...common,
         joiners: m.messageBody.join.joiners || [],
         leavers: m.messageBody.join.leavers || [],
       })
-    case RPCChatTypes.MessageType.leave:
+    case T.RPCChat.MessageType.leave:
       return makeMessageSystemLeft({
         ...common,
       })
-    case RPCChatTypes.MessageType.system:
-      return m.messageBody.system
-        ? uiMessageToSystemMessage(common, m.messageBody.system, common.reactions, m)
-        : null
-    case RPCChatTypes.MessageType.headline:
+    case T.RPCChat.MessageType.system:
+      return uiMessageToSystemMessage(common, m.messageBody.system, common.reactions, m)
+    case T.RPCChat.MessageType.headline:
       return makeMessageSetDescription({
         ...common,
         newDescription: new HiddenString(m.messageBody.headline.headline),
         reactions,
       })
-    case RPCChatTypes.MessageType.pin:
+    case T.RPCChat.MessageType.pin:
       return makeMessagePin({
         ...common,
-        pinnedMessageID: m.pinnedMessageID || m.messageID,
+        pinnedMessageID: T.Chat.numberToMessageID(m.pinnedMessageID || m.messageID),
         reactions,
       })
-    case RPCChatTypes.MessageType.metadata:
+    case T.RPCChat.MessageType.metadata:
       return makeMessageSetChannelname({
         ...common,
         newChannelname: m.messageBody.metadata.conversationTitle,
         reactions,
       })
-    case RPCChatTypes.MessageType.sendpayment:
+    case T.RPCChat.MessageType.sendpayment:
       return makeMessageSendPayment({
         ...common,
-        paymentInfo: uiPaymentInfoToChatPaymentInfo(m.paymentInfos || null),
+        paymentInfo: uiPaymentInfoToChatPaymentInfo(m.paymentInfos ?? undefined),
       })
-    case RPCChatTypes.MessageType.requestpayment:
+    case T.RPCChat.MessageType.requestpayment:
       return makeMessageRequestPayment({
         ...common,
-        note: new HiddenString(m.decoratedTextBody ?? ''),
+        note: m.decoratedTextBody ? new HiddenString(m.decoratedTextBody) : noString,
         requestID: m.messageBody.requestpayment.requestID,
-        requestInfo: uiRequestInfoToChatRequestInfo(m.requestInfo || null),
+        requestInfo: uiRequestInfoToChatRequestInfo(m.requestInfo ?? undefined),
       })
-    case RPCChatTypes.MessageType.edit:
-      return null
-    case RPCChatTypes.MessageType.delete:
-      return null
-    case RPCChatTypes.MessageType.deletehistory:
-      return null
+    case T.RPCChat.MessageType.edit: // fallthrough
+    case T.RPCChat.MessageType.delete: // fallthrough
+    case T.RPCChat.MessageType.deletehistory: // fallthrough
+      // make deleted so we can cleanup placeholders
+      return makeMessageDeleted({...common})
     default:
-      return null
+      return
   }
 }
 
-export const rpcErrorToString = (error: RPCChatTypes.OutboxStateError) => {
+export const rpcErrorToString = (error: T.RPCChat.OutboxStateError) => {
   switch (error.typ) {
-    case RPCChatTypes.OutboxErrorType.misc:
+    case T.RPCChat.OutboxErrorType.misc:
       return error.message || 'unknown error'
-    case RPCChatTypes.OutboxErrorType.offline:
+    case T.RPCChat.OutboxErrorType.offline:
       return 'disconnected from chat server'
-    case RPCChatTypes.OutboxErrorType.identify:
+    case T.RPCChat.OutboxErrorType.identify:
       return 'proofs failed for recipient user'
-    case RPCChatTypes.OutboxErrorType.toolong:
+    case T.RPCChat.OutboxErrorType.toolong:
       return 'message is too long'
-    case RPCChatTypes.OutboxErrorType.duplicate:
+    case T.RPCChat.OutboxErrorType.duplicate:
       return 'message already sent'
-    case RPCChatTypes.OutboxErrorType.expired:
+    case T.RPCChat.OutboxErrorType.expired:
       return 'took too long to send'
-    case RPCChatTypes.OutboxErrorType.restrictedbot:
+    case T.RPCChat.OutboxErrorType.restrictedbot:
       return 'bot is restricted from sending to this conversation'
-    case RPCChatTypes.OutboxErrorType.minwriter:
+    case T.RPCChat.OutboxErrorType.minwriter:
       return 'not high enough team role to post in this conversation'
     default:
       return `${error.message || ''} (code: ${error.typ})`
@@ -1123,145 +1045,139 @@ export const rpcErrorToString = (error: RPCChatTypes.OutboxStateError) => {
 }
 
 const outboxUIMessagetoMessage = (
-  conversationIDKey: Types.ConversationIDKey,
-  o: RPCChatTypes.UIMessageOutbox,
+  conversationIDKey: T.Chat.ConversationIDKey,
+  o: T.RPCChat.UIMessageOutbox,
   currentUsername: string,
-  getLastOrdinal: () => Types.Ordinal,
+  getLastOrdinal: () => T.Chat.Ordinal,
   currentDeviceName: string
-) => {
+): MessageTypes.Message | undefined => {
   const errorReason =
-    o.state && o.state.state === RPCChatTypes.OutboxStateType.error
-      ? rpcErrorToString(o.state.error)
-      : undefined
-  const errorTyp =
-    o.state && o.state.state === RPCChatTypes.OutboxStateType.error ? o.state.error.typ : undefined
+    o.state.state === T.RPCChat.OutboxStateType.error ? rpcErrorToString(o.state.error) : undefined
+  const errorTyp = o.state.state === T.RPCChat.OutboxStateType.error ? o.state.error.typ : undefined
 
   switch (o.messageType) {
-    case RPCChatTypes.MessageType.attachment: {
+    case T.RPCChat.MessageType.attachment: {
       const title = o.title
       const fileName = o.filename
       let previewURL = ''
-      let pre
+      let pre: T.Chat.PreviewSpec
       if (o.preview) {
         previewURL =
-          o.preview.location && o.preview.location.ltyp === RPCChatTypes.PreviewLocationTyp.url
+          o.preview.location && o.preview.location.ltyp === T.RPCChat.PreviewLocationTyp.url
             ? o.preview.location.url
             : ''
-        const md = (o.preview && o.preview.metadata) || null
-        const baseMd = (o.preview && o.preview.baseMetadata) || null
+        const md = o.preview.metadata ?? undefined
+        const baseMd = o.preview.baseMetadata ?? undefined
         pre = previewSpecs(md, baseMd)
       } else {
-        pre = previewSpecs(null, null)
+        pre = previewSpecs()
       }
       return makePendingAttachmentMessage(
         conversationIDKey,
         currentUsername,
         getLastOrdinal,
         title,
-        FsTypes.getLocalPathName(fileName),
+        T.FS.getLocalPathName(fileName),
         previewURL,
         pre,
-        Types.stringToOutboxID(o.outboxID),
-        Types.numberToOrdinal(o.ordinal),
+        T.Chat.stringToOutboxID(o.outboxID),
+        T.Chat.numberToOrdinal(o.ordinal),
         errorReason,
         errorTyp,
         o.isEphemeral
       )
     }
-    case RPCChatTypes.MessageType.flip:
-    case RPCChatTypes.MessageType.text:
+    case T.RPCChat.MessageType.flip: // fallthrough
+    case T.RPCChat.MessageType.text:
       return makeMessageText({
         author: currentUsername,
         conversationIDKey,
-        decoratedText: o.decoratedTextBody ? new HiddenString(o.decoratedTextBody) : null,
+        decoratedText: o.decoratedTextBody ? new HiddenString(o.decoratedTextBody) : undefined,
         deviceName: currentDeviceName,
-        deviceType: isMobile ? 'mobile' : 'desktop',
+        deviceType: C.isMobile ? 'mobile' : 'desktop',
         errorReason,
         errorTyp,
         exploding: o.isEphemeral,
-        flipGameID: o.flipGameID,
-        ordinal: Types.numberToOrdinal(o.ordinal),
-        outboxID: Types.stringToOutboxID(o.outboxID),
+        flipGameID: o.flipGameID ?? undefined,
+        ordinal: T.Chat.numberToOrdinal(o.ordinal),
+        outboxID: T.Chat.stringToOutboxID(o.outboxID),
         submitState: 'pending',
         text: new HiddenString(o.body),
         timestamp: o.ctime,
       })
+    default:
   }
-  return null
+  return
 }
 
 const placeholderUIMessageToMessage = (
-  conversationIDKey: Types.ConversationIDKey,
-  p: RPCChatTypes.MessageUnboxedPlaceholder
+  conversationIDKey: T.Chat.ConversationIDKey,
+  p: T.RPCChat.MessageUnboxedPlaceholder
 ) => {
   return !p.hidden
     ? makeMessagePlaceholder({
         conversationIDKey,
-        id: Types.numberToMessageID(p.messageID),
-        ordinal: Types.numberToOrdinal(p.messageID),
+        id: T.Chat.numberToMessageID(p.messageID),
+        ordinal: T.Chat.numberToOrdinal(p.messageID),
       })
     : makeMessageDeleted({
         conversationIDKey,
-        id: Types.numberToMessageID(p.messageID),
-        ordinal: Types.numberToOrdinal(p.messageID),
+        id: T.Chat.numberToMessageID(p.messageID),
+        ordinal: T.Chat.numberToOrdinal(p.messageID),
       })
 }
 
 const errorUIMessagetoMessage = (
-  conversationIDKey: Types.ConversationIDKey,
-  o: RPCChatTypes.MessageUnboxedError
+  conversationIDKey: T.Chat.ConversationIDKey,
+  o: T.RPCChat.MessageUnboxedError
 ) => {
   return makeMessageText({
     author: o.senderUsername,
     botUsername: o.botUsername || undefined,
     conversationIDKey,
     deviceName: o.senderDeviceName,
-    deviceType: DeviceTypes.stringToDeviceType(o.senderDeviceType),
+    deviceType: T.Devices.stringToDeviceType(o.senderDeviceType),
     errorReason: o.errMsg,
     exploded: o.isEphemeral && (o.etime < Date.now() || !!o.explodedBy),
     explodedBy: o.explodedBy || '',
     exploding: o.isEphemeral,
     explodingUnreadable: !!o.errType && o.isEphemeral,
-    id: Types.numberToMessageID(o.messageID),
-    ordinal: Types.numberToOrdinal(o.messageID),
+    id: T.Chat.numberToMessageID(o.messageID),
+    ordinal: T.Chat.numberToOrdinal(o.messageID),
     timestamp: o.ctime,
   })
 }
 
-export const journeyCardTypeToType = invert(RPCChatTypes.JourneycardType) as {
-  [K in RPCChatTypes.JourneycardType]: keyof typeof RPCChatTypes.JourneycardType
-}
-
 const journeycardUIMessageToMessage = (
-  conversationIDKey: Types.ConversationIDKey,
-  m: RPCChatTypes.UIMessageJourneycard
+  conversationIDKey: T.Chat.ConversationIDKey,
+  m: T.RPCChat.UIMessageJourneycard
 ) => {
   // only support these now
   if (
-    m.cardType === RPCChatTypes.JourneycardType.welcome ||
-    m.cardType === RPCChatTypes.JourneycardType.popularChannels
+    m.cardType === T.RPCChat.JourneycardType.welcome ||
+    m.cardType === T.RPCChat.JourneycardType.popularChannels
   ) {
     return makeMessageJourneycard({
       cardType: m.cardType,
       conversationIDKey,
-      highlightMsgID: m.highlightMsgID,
+      highlightMsgID: T.Chat.numberToMessageID(m.highlightMsgID),
       openTeam: m.openTeam,
-      ordinal: Types.numberToOrdinal(m.ordinal),
+      ordinal: T.Chat.numberToOrdinal(m.ordinal),
     })
   }
 
-  return null
+  return
 }
 
 export const uiMessageToMessage = (
-  conversationIDKey: Types.ConversationIDKey,
-  uiMessage: RPCChatTypes.UIMessage,
+  conversationIDKey: T.Chat.ConversationIDKey,
+  uiMessage: T.RPCChat.UIMessage,
   currentUsername: string,
-  getLastOrdinal: () => Types.Ordinal,
+  getLastOrdinal: () => T.Chat.Ordinal,
   currentDeviceName: string
-): Types.Message | null => {
+): T.Chat.Message | undefined => {
   switch (uiMessage.state) {
-    case RPCChatTypes.MessageUnboxedState.valid:
+    case T.RPCChat.MessageUnboxedState.valid:
       return validUIMessagetoMessage(
         conversationIDKey,
         uiMessage.valid,
@@ -1269,9 +1185,9 @@ export const uiMessageToMessage = (
         getLastOrdinal,
         currentDeviceName
       )
-    case RPCChatTypes.MessageUnboxedState.error:
+    case T.RPCChat.MessageUnboxedState.error:
       return errorUIMessagetoMessage(conversationIDKey, uiMessage.error)
-    case RPCChatTypes.MessageUnboxedState.outbox:
+    case T.RPCChat.MessageUnboxedState.outbox:
       return outboxUIMessagetoMessage(
         conversationIDKey,
         uiMessage.outbox,
@@ -1279,27 +1195,27 @@ export const uiMessageToMessage = (
         getLastOrdinal,
         currentDeviceName
       )
-    case RPCChatTypes.MessageUnboxedState.placeholder:
+    case T.RPCChat.MessageUnboxedState.placeholder:
       return placeholderUIMessageToMessage(conversationIDKey, uiMessage.placeholder)
-    case RPCChatTypes.MessageUnboxedState.journeycard:
+    case T.RPCChat.MessageUnboxedState.journeycard:
       return journeycardUIMessageToMessage(conversationIDKey, uiMessage.journeycard)
     default: // A type error here means there is an unhandled message state
-      assertNever(uiMessage)
-      return null
+      C.assertNever(uiMessage)
+      return
   }
 }
 
-export function nextFractionalOrdinal(ord: Types.Ordinal): Types.Ordinal {
+export function nextFractionalOrdinal(ord: T.Chat.Ordinal) {
   // Mimic what the service does with outbox items
-  return Types.numberToOrdinal(Types.ordinalToNumber(ord) + 0.001)
+  return T.Chat.numberToOrdinal(T.Chat.ordinalToNumber(ord) + 0.001)
 }
 
 export const makePendingTextMessage = (
-  conversationIDKey: Types.ConversationIDKey,
+  conversationIDKey: T.Chat.ConversationIDKey,
   currentUsername: string,
-  getLastOrdinal: () => Types.Ordinal,
+  getLastOrdinal: () => T.Chat.Ordinal,
   text: HiddenString,
-  outboxID: Types.OutboxID,
+  outboxID: T.Chat.OutboxID,
   explodeTime?: number
 ) => {
   // we could read the exploding mode for the convo from state here, but that
@@ -1314,8 +1230,8 @@ export const makePendingTextMessage = (
     author: currentUsername,
     conversationIDKey,
     deviceName: '',
-    deviceType: isMobile ? 'mobile' : 'desktop',
-    id: Types.numberToMessageID(0),
+    deviceType: C.isMobile ? 'mobile' : 'desktop',
+    id: T.Chat.numberToMessageID(0),
     ordinal,
     outboxID,
     submitState: 'pending',
@@ -1325,15 +1241,15 @@ export const makePendingTextMessage = (
 }
 
 export const makePendingAttachmentMessage = (
-  conversationIDKey: Types.ConversationIDKey,
+  conversationIDKey: T.Chat.ConversationIDKey,
   currentUsername: string,
-  getLastOrdinal: () => Types.Ordinal,
+  getLastOrdinal: () => T.Chat.Ordinal,
   title: string,
   fileName: string,
   previewURL: string,
-  previewSpec: Types.PreviewSpec,
-  outboxID: Types.OutboxID,
-  inOrdinal: Types.Ordinal | null,
+  previewSpec: T.Chat.PreviewSpec,
+  outboxID: T.Chat.OutboxID,
+  inOrdinal: T.Chat.Ordinal | null,
   errorReason?: string,
   errorTyp?: number,
   exploding?: boolean
@@ -1347,47 +1263,24 @@ export const makePendingAttachmentMessage = (
     author: currentUsername,
     conversationIDKey,
     deviceName: '',
-    deviceType: isMobile ? 'mobile' : 'desktop',
-    errorReason: errorReason,
-    errorTyp: errorTyp,
+    deviceType: C.isMobile ? 'mobile' : 'desktop',
+    errorReason,
+    errorTyp,
     exploding,
-    fileName: fileName,
-    id: Types.numberToMessageID(0),
+    fileName,
+    id: T.Chat.numberToMessageID(0),
     inlineVideoPlayable: previewSpec.showPlayButton,
     isCollapsed: false,
-    ordinal: ordinal,
-    outboxID: outboxID,
+    ordinal,
+    outboxID,
     previewHeight: previewSpec.height,
-    previewURL: previewURL,
+    previewURL,
     previewWidth: previewSpec.width,
     showPlayButton: previewSpec.showPlayButton,
     submitState: 'pending',
     timestamp: Date.now(),
-    title: title,
+    title,
   })
-}
-
-export const getClientPrev = (
-  state: TypedState,
-  conversationIDKey: Types.ConversationIDKey
-): Types.MessageID => {
-  let clientPrev: undefined | Types.MessageID
-
-  const mm = state.chat2.messageMap.get(conversationIDKey)
-  if (mm) {
-    // find last valid messageid we know about
-    const goodOrdinal = [...(state.chat2.messageOrdinals.get(conversationIDKey) || [])].reverse().find(o => {
-      const m = mm.get(o)
-      return m && m.id
-    })
-
-    if (goodOrdinal) {
-      const message = mm.get(goodOrdinal)
-      clientPrev = message && message.id
-    }
-  }
-
-  return clientPrev || 0
 }
 
 const imageFileNameRegex = /[^/]+\.(jpg|png|gif|jpeg|bmp)$/i
@@ -1405,70 +1298,13 @@ export const isSpecialMention = (s: string) => ['here', 'channel', 'everyone'].i
 
 export const specialMentions = ['here', 'channel', 'everyone']
 
-// TODO maybe its better to avoid merging at all and just deal with it at the component level. we pay for merging
-// on non visible items so the cost might be higher
-export const mergeMessage = (old: Types.Message | null, m: Types.Message): Types.Message => {
-  if (!old) {
-    return m
-  }
-
-  // only merge if its the same id and type
-  if (old.id !== m.id || old.type !== m.type) {
-    return m
-  }
-
-  let toRet: any = {...m}
-
-  // if all props are the same then just use old
-  let allSame = true
-  Object.keys(old).forEach(key => {
-    switch (key) {
-      case 'mentionsChannelName':
-      case 'reactions':
-      case 'mentionsAt':
-      case 'audioAmps':
-        if (shallowEqual([...old[key]], [...m[key]])) {
-          toRet[key] = old[key]
-        } else {
-          allSame = false
-        }
-        break
-      case 'bodySummary':
-      case 'decoratedText':
-      case 'text':
-        if (old[key]?.stringValue?.() === m[key]?.stringValue?.()) {
-          toRet[key] = old[key]
-        } else {
-          allSame = false
-        }
-        break
-      case 'unfurls':
-        if (isEqual(m[key], old[key])) {
-          toRet[key] = old[key]
-        } else {
-          allSame = false
-        }
-        break
-      default:
-        // @ts-ignore strict: key is just a string here so TS doesn't like it
-        if (old[key] === m[key]) {
-          // @ts-ignore strict
-          toRet[key] = old[key]
-        } else {
-          allSame = false
-        }
-    }
-  })
-  if (allSame) {
-    toRet = old
-  }
-  return toRet
-}
-
-export const upgradeMessage = (old: Types.Message, m: Types.Message): Types.Message => {
+export const upgradeMessage = (
+  old: T.Immutable<T.Chat.Message>,
+  m: T.Immutable<T.Chat.Message>
+): T.Immutable<T.Chat.Message> => {
   const validUpgrade = (
-    old: Types.MessageText | Types.MessageAttachment,
-    m: Types.MessageText | Types.MessageAttachment
+    old: T.Immutable<T.Chat.MessageText | T.Chat.MessageAttachment>,
+    m: T.Immutable<T.Chat.MessageText | T.Chat.MessageAttachment>
   ) => {
     if (old.submitState !== 'pending' && m.submitState === 'pending') {
       // we may be making sure we got our pending message in the thread view, but if we already
@@ -1510,7 +1346,7 @@ export const upgradeMessage = (old: Types.Message, m: Types.Message): Types.Mess
       ordinal: old.ordinal,
       previewURL: old.previewURL && !m.previewURL ? old.previewURL : m.previewURL,
       transferProgress: old.transferProgress,
-      transferState: old.transferState === 'remoteUploading' ? null : old.transferState,
+      transferState: old.transferState === 'remoteUploading' ? undefined : old.transferState,
     }
   }
 
@@ -1522,7 +1358,10 @@ export const upgradeMessage = (old: Types.Message, m: Types.Message): Types.Mess
   return m
 }
 
-export const shouldShowPopup = (state: TypedState, message?: Types.Message) => {
+export const shouldShowPopup = (
+  accountsInfoMap?: ConvoConstants.ConvoState['accountsInfoMap'],
+  message?: T.Chat.Message
+) => {
   switch (message?.type) {
     case 'text':
     case 'attachment':
@@ -1544,7 +1383,7 @@ export const shouldShowPopup = (state: TypedState, message?: Types.Message) => {
     case 'setChannelname':
       return message.newChannelname !== 'general'
     case 'sendPayment': {
-      const paymentInfo = getPaymentMessageInfo(state, message)
+      const paymentInfo = accountsInfoMap && getPaymentMessageInfo(accountsInfoMap, message)
       if (!paymentInfo || ['claimable', 'pending', 'canceled'].includes(paymentInfo.status)) {
         return false
       }
@@ -1555,7 +1394,7 @@ export const shouldShowPopup = (state: TypedState, message?: Types.Message) => {
   }
 }
 
-export const messageExplodeDescriptions: Types.MessageExplodeDescription[] = [
+export const messageExplodeDescriptions: T.Chat.MessageExplodeDescription[] = [
   {seconds: 30, text: '30 seconds'},
   {seconds: 300, text: '5 minutes'},
   {seconds: 3600, text: '60 minutes'},
@@ -1567,7 +1406,7 @@ export const messageExplodeDescriptions: Types.MessageExplodeDescription[] = [
 ].reverse()
 
 export const messageAttachmentTransferStateToProgressLabel = (
-  transferState: Types.MessageAttachmentTransferState
+  transferState: T.Chat.MessageAttachmentTransferState
 ): string => {
   switch (transferState) {
     case 'downloading':
@@ -1583,7 +1422,7 @@ export const messageAttachmentTransferStateToProgressLabel = (
   }
 }
 
-export const messageAttachmentHasProgress = (message: Types.MessageAttachment) => {
+export const messageAttachmentHasProgress = (message: T.Chat.MessageAttachment) => {
   return (
     !!message.transferState &&
     message.transferState !== 'remoteUploading' &&

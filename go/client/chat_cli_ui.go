@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/keybase/client/go/chatrender"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	gregor1 "github.com/keybase/client/go/protocol/gregor1"
@@ -19,9 +20,10 @@ import (
 type ChatCLINotifications struct {
 	libkb.Contextified
 	chat1.NotifyChatInterface
-	noOutput              bool
-	terminal              libkb.TerminalUI
-	lastAttachmentPercent int
+	noOutput bool
+	terminal libkb.TerminalUI
+	// Progress for attachment uploads/downloads and chat archives
+	lastProgressPercent int
 }
 
 var _ chat1.NotifyChatInterface = (*ChatCLINotifications)(nil)
@@ -39,7 +41,7 @@ func (n *ChatCLINotifications) ChatAttachmentUploadStart(ctx context.Context,
 		return nil
 	}
 	w := n.terminal.ErrorWriter()
-	fmt.Fprintf(w, "Attachment upload "+ColorString(n.G(), "green", "starting")+"\n")
+	fmt.Fprintf(w, "%s", "Attachment upload "+ColorString(n.G(), "green", "starting")+"\n")
 	return nil
 }
 
@@ -49,11 +51,11 @@ func (n *ChatCLINotifications) ChatAttachmentUploadProgress(ctx context.Context,
 		return nil
 	}
 	percent := int((100 * arg.BytesComplete) / arg.BytesTotal)
-	if n.lastAttachmentPercent == 0 || percent == 100 || percent-n.lastAttachmentPercent >= 10 {
+	if n.lastProgressPercent == 0 || percent == 100 || percent-n.lastProgressPercent >= 10 {
 		w := n.terminal.ErrorWriter()
 		fmt.Fprintf(w, "Attachment upload progress %d%% (%d of %d bytes uploaded)\n", percent,
 			arg.BytesComplete, arg.BytesTotal)
-		n.lastAttachmentPercent = percent
+		n.lastProgressPercent = percent
 	}
 	return nil
 }
@@ -64,7 +66,7 @@ func (n *ChatCLINotifications) ChatAttachmentDownloadComplete(ctx context.Contex
 		return nil
 	}
 	w := n.terminal.ErrorWriter()
-	fmt.Fprintf(w, "Attachment download "+ColorString(n.G(), "magenta", "finished")+"\n")
+	fmt.Fprintf(w, "Attachment download %s\n", ColorString(n.G(), "magenta", "finished"))
 	return nil
 }
 
@@ -74,11 +76,39 @@ func (n *ChatCLINotifications) ChatAttachmentDownloadProgress(ctx context.Contex
 		return nil
 	}
 	percent := int((100 * arg.BytesComplete) / arg.BytesTotal)
-	if n.lastAttachmentPercent == 0 || percent == 100 || percent-n.lastAttachmentPercent >= 10 {
+	if n.lastProgressPercent == 0 || percent == 100 || percent-n.lastProgressPercent >= 10 {
 		w := n.terminal.ErrorWriter()
 		fmt.Fprintf(w, "Attachment download progress %d%% (%d of %d bytes downloaded)\n", percent,
 			arg.BytesComplete, arg.BytesTotal)
-		n.lastAttachmentPercent = percent
+		n.lastProgressPercent = percent
+	}
+	return nil
+}
+
+func (n *ChatCLINotifications) ChatArchiveComplete(ctx context.Context,
+	arg chat1.ArchiveJobID) error {
+	if n.noOutput {
+		return nil
+	}
+	w := n.terminal.ErrorWriter()
+	fmt.Fprintf(w, "Archive download %s\n", ColorString(n.G(), "blue", "finished"))
+	return nil
+}
+
+func (n *ChatCLINotifications) ChatArchiveProgress(ctx context.Context,
+	arg chat1.ChatArchiveProgressArg) error {
+	if n.noOutput {
+		return nil
+	}
+	percent := 100
+	if arg.MessagesTotal > 0 {
+		percent = int((100 * arg.MessagesComplete) / arg.MessagesTotal)
+	}
+	if n.lastProgressPercent == 0 || percent == 100 || percent-n.lastProgressPercent >= 10 {
+		w := n.terminal.ErrorWriter()
+		fmt.Fprintf(w, "Archival download progress %d%% (%d of %d messages archived)\n", percent,
+			arg.MessagesComplete, arg.MessagesTotal)
+		n.lastProgressPercent = percent
 	}
 	return nil
 }
@@ -148,7 +178,7 @@ func (c *ChatCLIUI) renderSearchHit(ctx context.Context, searchHit chat1.ChatSea
 	getMsgPrefix := func(msg chat1.UIMessage) string {
 		m := msg.Valid()
 		t := gregor1.FromTime(m.Ctime)
-		return fmt.Sprintf("[%s %s] ", m.SenderUsername, shortDurationFromNow(t))
+		return fmt.Sprintf("[%s %s] ", m.SenderUsername, chatrender.ShortDurationFromNow(t))
 	}
 
 	getContext := func(msgs []chat1.UIMessage) string {
@@ -179,7 +209,7 @@ func (c *ChatCLIUI) renderSearchHit(ctx context.Context, searchHit chat1.ChatSea
 				// Splice the match into the result with a color highlight. We
 				// can't do a direct string replacement since the match might
 				// be a substring of the color text.
-				escapedHitText = escapedHitText[:i] + ColorString(c.G(), "red", escapedHit) + escapedHitText[j:]
+				escapedHitText = escapedHitText[:i] + ColorString(c.G(), "red", "%s", escapedHit) + escapedHitText[j:]
 				totalOffset += colorStrOffset
 			}
 			return terminalescaper.Clean(getMsgPrefix(msg)) + escapedHitText
@@ -359,7 +389,7 @@ func (c *ChatCLIUI) ChatStellarDataConfirm(ctx context.Context, arg chat1.ChatSt
 func (c *ChatCLIUI) ChatStellarDataError(ctx context.Context, arg chat1.ChatStellarDataErrorArg) (bool, error) {
 	w := c.terminal.ErrorWriter()
 	msg := "Failed to obtain Stellar payment information, aborting send"
-	fmt.Fprintf(w, msg+"\n")
+	fmt.Fprintf(w, "%s", msg+"\n")
 	return false, errors.New(msg)
 }
 

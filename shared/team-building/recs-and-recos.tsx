@@ -1,15 +1,13 @@
-import * as Kb from '../common-adapters'
+import * as Kb from '@/common-adapters'
 import * as React from 'react'
-import * as Styles from '../styles'
 import AlphabetIndex from './alphabet-index'
 import PeopleResult from './search-result/people-result'
 import UserResult from './search-result/user-result'
 import type * as Types from './types'
 import {ContactsImportButton} from './contacts'
-import {memoize} from '../util/memoize'
 import {userResultHeight} from './search-result/common-result'
-import {createAnimatedComponent} from '../common-adapters/reanimated'
-import type {Props as SectionListProps, Section as SectionType} from '../common-adapters/section-list'
+import {createAnimatedComponent} from '@/common-adapters/reanimated'
+import type {Props as SectionListProps, Section as SectionType} from '@/common-adapters/section-list'
 
 export const numSectionLabel = '0-9'
 
@@ -36,7 +34,7 @@ const TeamAlphabetIndex = (
   let showNumSection = false
   let labels: Array<string> = []
   if (recommendations && recommendations.length > 0) {
-    showNumSection = recommendations[recommendations.length - 1].label === numSectionLabel
+    showNumSection = recommendations.at(-1)?.label === numSectionLabel
     labels = recommendations.filter(r => r.shortcut && r.label !== numSectionLabel).map(r => r.label)
   }
 
@@ -49,7 +47,7 @@ const TeamAlphabetIndex = (
             ? recommendations.length - 1
             : recommendations.findIndex(section => section.label === label))) ||
         -1
-      if (sectionIndex >= 0 && Styles.isMobile) {
+      if (sectionIndex >= 0 && Kb.Styles.isMobile) {
         ref.scrollToLocation({
           animated: false,
           itemIndex: 0,
@@ -77,8 +75,24 @@ const TeamAlphabetIndex = (
 
 const SectionList = createAnimatedComponent<
   SectionListProps<SectionType<Types.ResultData, Types.SearchRecSection>>
->(Kb.SectionList as any)
+>(Kb.SectionList)
 
+const _listIndexToSectionAndLocalIndex = (
+  highlightedIndex?: number,
+  sections?: Types.SearchRecSection[]
+): {index: number; section: Types.SearchRecSection} | undefined => {
+  if (highlightedIndex !== undefined && sections !== undefined) {
+    let index = highlightedIndex
+    for (const section of sections) {
+      if (index >= section.data.length) {
+        index -= section.data.length
+      } else {
+        return {index, section}
+      }
+    }
+  }
+  return
+}
 export const RecsAndRecos = (
   props: Pick<
     Types.Props,
@@ -100,25 +114,6 @@ export const RecsAndRecos = (
   const sectionListRef =
     React.useRef<Kb.SectionList<SectionType<Types.ResultData, Types.SearchRecSection>>>(null)
   const ResultRow = namespace === 'people' ? PeopleResult : UserResult
-
-  const _listIndexToSectionAndLocalIndex = memoize(
-    (
-      highlightedIndex: number | null,
-      sections: Types.SearchRecSection[] | null
-    ): {index: number; section: Types.SearchRecSection} | null => {
-      if (highlightedIndex !== null && sections !== null) {
-        let index = highlightedIndex
-        for (const section of sections) {
-          if (index >= section.data.length) {
-            index -= section.data.length
-          } else {
-            return {index, section}
-          }
-        }
-      }
-      return null
-    }
-  )
 
   const _getRecLayout = (
     sections: Array<Types.SearchRecSection>,
@@ -158,19 +153,22 @@ export const RecsAndRecos = (
     return {index: indexInList, length, offset}
   }
 
-  const highlightDetails = _listIndexToSectionAndLocalIndex(highlightedIndex, recommendations)
+  const highlightDetails = React.useMemo(
+    () => _listIndexToSectionAndLocalIndex(highlightedIndex, recommendations),
+    [highlightedIndex, recommendations]
+  )
   return (
     <Kb.BoxGrow>
       <Kb.Box2 direction="vertical" fullWidth={true} style={styles.listContainer}>
         <SectionList
-          ref={sectionListRef}
+          ref={Kb.Styles.isMobile ? sectionListRef : undefined}
           contentContainerStyle={{minHeight: '133%'}}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           stickySectionHeadersEnabled={false}
           scrollEventThrottle={1}
           onScroll={onScroll}
-          selectedIndex={Styles.isMobile ? undefined : highlightedIndex || 0}
+          selectedIndex={Kb.Styles.isMobile ? undefined : highlightedIndex || 0}
           sections={recommendations ?? []}
           keyExtractor={(item: Types.ResultData, index: number) => {
             if (!isImportContactsEntry(item) && !isSearchHintEntry(item) && item.contact) {
@@ -180,8 +178,8 @@ export const RecsAndRecos = (
             return isImportContactsEntry(item)
               ? 'Import Contacts'
               : isSearchHintEntry(item)
-              ? 'New User Search Hint'
-              : item.userId
+                ? 'New User Search Hint'
+                : item.userId
           }}
           getItemLayout={_getRecLayout}
           renderItem={({index, item: result, section}) =>
@@ -203,7 +201,7 @@ export const RecsAndRecos = (
                 isYou={result.isYou}
                 followingState={result.followingState}
                 highlight={
-                  !Styles.isMobile &&
+                  !Kb.Styles.isMobile &&
                   !!highlightDetails &&
                   highlightDetails.section === section &&
                   highlightDetails.index === index
@@ -214,13 +212,13 @@ export const RecsAndRecos = (
               />
             )
           }
-          renderSectionHeader={({section: {label}}: any) =>
-            label && (!Styles.isMobile || label !== 'Recommendations') ? (
+          renderSectionHeader={({section: {label}}) =>
+            label && (!Kb.Styles.isMobile || label !== 'Recommendations') ? (
               <Kb.SectionDivider label={label} />
             ) : null
           }
         />
-        {Styles.isMobile && (
+        {Kb.Styles.isMobile && (
           <TeamAlphabetIndex
             recommendations={recommendations}
             sectionListRef={sectionListRef}
@@ -232,16 +230,16 @@ export const RecsAndRecos = (
   )
 }
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
       alphabetIndex: {
         maxHeight: '80%',
         position: 'absolute',
         right: 0,
-        top: Styles.globalMargins.large,
+        top: Kb.Styles.globalMargins.large,
       },
-      listContainer: Styles.platformStyles({
+      listContainer: Kb.Styles.platformStyles({
         common: {position: 'relative'},
         isElectron: {flex: 1, height: '100%', overflow: 'hidden'},
         isMobile: {
@@ -250,9 +248,9 @@ const styles = Styles.styleSheetCreate(
         },
       }),
       searchHint: {
-        paddingLeft: Styles.globalMargins.xlarge,
-        paddingRight: Styles.globalMargins.xlarge,
-        paddingTop: Styles.globalMargins.xlarge,
+        paddingLeft: Kb.Styles.globalMargins.xlarge,
+        paddingRight: Kb.Styles.globalMargins.xlarge,
+        paddingTop: Kb.Styles.globalMargins.xlarge,
       },
-    } as const)
+    }) as const
 )

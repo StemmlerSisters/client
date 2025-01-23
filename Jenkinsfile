@@ -78,13 +78,13 @@ helpers.rootLinuxNode(env, {
   def kbwebTag = cause == 'upstream' && kbwebProjectName != '' ? kbwebProjectName : 'master'
   def images = [
     docker.image("897413463132.dkr.ecr.us-east-1.amazonaws.com/glibc"),
-    docker.image("897413463132.dkr.ecr.us-east-1.amazonaws.com/mysql"),
+    docker.image("897413463132.dkr.ecr.us-east-1.amazonaws.com/mysql:8.0.35-debian"),
     docker.image("897413463132.dkr.ecr.us-east-1.amazonaws.com/sqsd"),
     docker.image("897413463132.dkr.ecr.us-east-1.amazonaws.com/kbweb:${kbwebTag}"),
   ]
   def kbfsfuseImage
-
-  def kbwebNodePrivateIP = httpRequest("http://169.254.169.254/latest/meta-data/local-ipv4").content
+  def awsToken = httpRequest(httpMode: "PUT", url: "http://169.254.169.254/latest/api/token", customHeaders: [[name: "X-aws-ec2-metadata-token-ttl-seconds", value: "21600"]]).content
+  def kbwebNodePrivateIP = httpRequest(customHeaders: [[name: "X-aws-ec2-metadata-token", value: "${awsToken}"]], url: "http://169.254.169.254/latest/meta-data/local-ipv4").content
 
   println "Running on host $kbwebNodePrivateIP"
   println "Setting up build: ${env.BUILD_TAG}"
@@ -196,6 +196,10 @@ helpers.rootLinuxNode(env, {
                 "GPG=/usr/bin/gpg.distrib",
               ]) {
                 if (hasGoChanges || hasJenkinsfileChanges) {
+                  // install the updater test binary
+                  dir('go') {
+                    sh "go install github.com/keybase/client/go/updater/test"
+                  }
                   testGo("test_linux_go_", packagesToTest, hasKBFSChanges)
                 }
               }},
@@ -232,22 +236,21 @@ helpers.rootLinuxNode(env, {
                       docker.withRegistry('https://897413463132.dkr.ecr.us-east-1.amazonaws.com', 'ecr:us-east-1:aws-ecr-user') {
                         kbfsfuseImage.push(env.BUILD_TAG)
                       }
-                      // TODO(ZCLIENT-2469)
-                      // if (env.BRANCH_NAME == "master" && cause != "upstream") {
-                      //   build([
-                      //     job: "/kbfs-server/master",
-                      //     parameters: [
-                      //       string(
-                      //         name: 'kbfsProjectName',
-                      //         value: env.BUILD_TAG,
-                      //       ),
-                      //       string(
-                      //         name: 'kbwebProjectName',
-                      //         value: kbwebTag,
-                      //       ),
-                      //     ]
-                      //   ])
-                      // }
+                      if (env.BRANCH_NAME == "master" && cause != "upstream") {
+                        build([
+                          job: "/kbfs-server/master",
+                          parameters: [
+                            string(
+                              name: 'kbfsProjectName',
+                              value: env.BUILD_TAG,
+                            ),
+                            string(
+                              name: 'kbwebProjectName',
+                              value: kbwebTag,
+                            ),
+                          ]
+                        ])
+                      }
                     }
                   }
                 }
@@ -261,7 +264,7 @@ helpers.rootLinuxNode(env, {
                 def GOPATH="${BASEDIR}\\go"
                 withEnv([
                   'GOROOT=C:\\Program Files\\go',
-                  "GOPATH=\"${GOPATH}\"",
+                  "GOPATH=${GOPATH}",
                   "PATH=\"C:\\tools\\go\\bin\";\"C:\\Program Files (x86)\\GNU\\GnuPG\";\"C:\\Program Files\\nodejs\";\"C:\\tools\\python\";\"C:\\Program Files\\graphicsmagick-1.3.24-q8\";\"${GOPATH}\\bin\";${env.PATH}",
                   "KEYBASE_SERVER_URI=http://${kbwebNodePrivateIP}:3000",
                   "KEYBASE_PUSH_SERVER_URI=fmprpc://${kbwebNodePrivateIP}:9911",
@@ -277,6 +280,10 @@ helpers.rootLinuxNode(env, {
                   println "Test Windows"
                   parallel (
                     test_windows_go: {
+                      // install the updater test binary
+                      dir('go') {
+                        sh "go install github.com/keybase/client/go/updater/test"
+                      }
                       testGo("test_windows_go_", getPackagesToTest(dependencyFiles, hasJenkinsfileChanges), hasKBFSChanges)
                     }
                   )
@@ -438,18 +445,6 @@ def testGoBuilds(prefix, packagesToTest, hasKBFSChanges) {
     }
   }
 
-  println "Running golint"
-  dir("buildtools") {
-    retry(5) {
-      sh 'go install golang.org/x/lint/golint'
-    }
-  }
-  retry(5) {
-    timeout(activity: true, time: 1200, unit: 'SECONDS') {
-      sh 'make -s lint'
-    }
-  }
-
   if (prefix == "test_linux_go_") {
     // Only test golangci-lint on linux
     println "Installing golangci-lint"
@@ -458,6 +453,7 @@ def testGoBuilds(prefix, packagesToTest, hasKBFSChanges) {
         sh 'go install github.com/golangci/golangci-lint/cmd/golangci-lint'
       }
     }
+    //
 
     // TODO re-enable for kbfs.
     // if (hasKBFSChanges) {
@@ -466,7 +462,7 @@ def testGoBuilds(prefix, packagesToTest, hasKBFSChanges) {
     //     retry(5) {
     //       timeout(activity: true, time: 720, unit: 'SECONDS') {
     //         // Ignore the `dokan` directory since it contains lots of c code.
-    //         sh 'go list -f "{{.Dir}}" ./...  | fgrep -v dokan  | xargs realpath --relative-to=. | xargs golangci-lint run --deadline 10m0s'
+    //         sh 'go list -f "{{.Dir}}" ./...  | fgrep -v dokan  | xargs realpath --relative-to=. | xargs golangci-lint run --timeout 10m0s'
     //       }
     //     }
     //   }
@@ -478,7 +474,7 @@ def testGoBuilds(prefix, packagesToTest, hasKBFSChanges) {
       def BASE_COMMIT_HASH = getBaseCommitHash()
       timeout(activity: true, time: 720, unit: 'SECONDS') {
         // Ignore the `protocol` directory, autogeneration has some critques
-        sh "go list -f '{{.Dir}}' ./...  | fgrep -v kbfs | fgrep -v protocol | xargs realpath --relative-to=. | xargs golangci-lint run --new-from-rev ${BASE_COMMIT_HASH} --deadline 10m0s"
+        sh "go list -f '{{.Dir}}' ./...  | fgrep -v kbfs | fgrep -v protocol | xargs realpath --relative-to=. | xargs golangci-lint run --new-from-rev ${BASE_COMMIT_HASH} --timeout 10m0s"
       }
     } else {
       println("Running golangci-lint on all non-KBFS code")

@@ -18,21 +18,14 @@ LogBox.ignoreAllLogs()
 // require('react-native/Libraries/Interaction/InteractionStallDebugger').install({thresholdMS: 100})
 
 // Set this to true if you want to turn off most console logging so you can profile easier
-const PERF = false
+const PERF = false as boolean
 
 const config = {
   allowMultipleInstances: false,
-  debugFullLogs: false,
-  enableActionLogging: true, // Log actions to the log
-  enableStoreLogging: false, // Log full store changes
   featureFlagsOverride: '', // Override feature flags
-  filterActionLogs: null, // Filter actions in log
   forceImmediateLogging: false, // Don't wait for idle to log
   ignoreDisconnectOverlay: false,
-  immediateStateLogging: false, // Don't wait for idle to log state
   isDevApplePushToken: false, // Use a dev push token
-  isTesting: false, // NativeModules.Storybook.isStorybook, // Is running a unit test
-  partyMode: false,
   printOutstandingRPCs: false, // Periodically print rpcs we're waiting for
   printOutstandingTimerListeners: false, // Periodically print listeners to the second clock
   printRPC: false, // Print rpc traffic
@@ -43,14 +36,10 @@ const config = {
   skipAppFocusActions: false,
   skipExtensions: true,
   skipSecondaryDevtools: true,
-  userTimings: false, // Add user timings api to timeline in chrome
 }
 
 // Developer settings
 if (__DEV__) {
-  config.enableActionLogging = false
-  config.enableStoreLogging = false
-  config.immediateStateLogging = false
   // Move this outside the if statement to get notifications working
   // with a "Profile" build on a phone.
   config.isDevApplePushToken = true
@@ -60,7 +49,6 @@ if (__DEV__) {
   config.printRPC = false
   // TODO is this even used?
   config.printRPCStats = false
-  config.userTimings = false
 
   // uncomment this to watch the RN bridge traffic: https://github.com/facebook/react-native/commit/77e48f17824870d30144a583be77ec5c9cf9f8c5
   // MessageQueue.spy(msg => console._log('queuespy: ', msg, JSON.stringify(msg).length))
@@ -87,13 +75,6 @@ if (__DEV__) {
 //   window.console.info = window.console.log
 // }
 
-// If debugFullLogs
-if (config.debugFullLogs) {
-  console.warn('\n\n\nlocal debug config.debugFullLogs is ONNNNNn!!!!!1!!!11!!!!\n')
-  config.printRPC = true
-  config.enableActionLogging = true
-}
-
 if (PERF) {
   console.warn('\n\n\nlocal debug PERF is ONNNNNn!!!!!1!!!11!!!!\nAll console.logs disabled!\n\n\n')
 
@@ -102,24 +83,22 @@ if (PERF) {
   window.console.error = noop
   window.console.info = noop
 
-  config.enableActionLogging = false
-  config.enableStoreLogging = false
-  config.filterActionLogs = null
   config.forceImmediateLogging = false
-  config.immediateStateLogging = false
   config.printOutstandingRPCs = false
   config.printOutstandingTimerListeners = false
   config.printRPC = false
-  config.userTimings = true
 }
 
 if (serverConfig) {
   try {
-    const sc = JSON.parse(serverConfig)
-    if (sc.lastLoggedInUser) {
-      const userConfig = sc[sc.lastLoggedInUser] || {}
-      if (userConfig.printRPCStats) {
-        config.printRPCStats = true
+    const sc = JSON.parse(serverConfig) as undefined | {[key: string]: unknown}
+    if (sc?.['lastLoggedInUser']) {
+      const lastLoggedInUser = sc['lastLoggedInUser']
+      if (typeof lastLoggedInUser === 'string') {
+        const userConfig = sc[lastLoggedInUser] as {[key: string]: unknown}
+        if (typeof userConfig === 'object' && userConfig['printRPCStats']) {
+          config.printRPCStats = true
+        }
       }
     }
   } catch (e) {}
@@ -127,16 +106,10 @@ if (serverConfig) {
 
 export const {
   allowMultipleInstances,
-  enableActionLogging,
-  enableStoreLogging,
   featureFlagsOverride,
-  filterActionLogs,
   forceImmediateLogging,
   ignoreDisconnectOverlay,
-  immediateStateLogging,
   isDevApplePushToken,
-  isTesting,
-  partyMode,
   printOutstandingRPCs,
   printOutstandingTimerListeners,
   printRPC,
@@ -145,5 +118,4 @@ export const {
   showDevTools,
   skipExtensions,
   skipSecondaryDevtools,
-  userTimings,
 } = config

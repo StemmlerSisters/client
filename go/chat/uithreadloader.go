@@ -317,7 +317,7 @@ func (t *UIThreadLoader) setUIStatus(ctx context.Context, chatUI libkb.ChatUI,
 			case <-ctx.Done():
 				t.Debug(ctx, "setUIStatus: context canceled")
 			default:
-				if err := chatUI.ChatThreadStatus(ctx, status); err != nil {
+				if err := chatUI.ChatThreadStatus(context.Background(), status); err != nil {
 					t.Debug(ctx, "setUIStatus: failed to send: %s", err)
 				}
 				displayed = true
@@ -661,6 +661,8 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		}
 		// wait until we are online before attempting the full pull, otherwise we just waste an attempt
 		if fullErr = t.waitForOnline(ctx); fullErr != nil {
+			t.Debug(ctx, "LoadNonblock: waitForOnline error: %s", fullErr)
+			setDisplayedStatus(cancelUIStatus)
 			return
 		}
 		customRi := t.makeRi(ctx, uid, convID, knownRemotes)
@@ -754,7 +756,7 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 					// only deliver these updates for the current conv
 					continue
 				}
-				// filter resolved to only update changed messges
+				// filter resolved to only update changed messages
 				var changed []chat1.MessageUnboxed
 				for _, rmsg := range resolved {
 					if modifiedMap[rmsg.GetMessageID()] {
@@ -796,17 +798,23 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		// use a background context here in case our context has been canceled, we don't want to not
 		// get this banner off the screen.
 		if fullErr == nil {
+			t.Debug(ctx, "LoadNonblock: clearing with validated")
 			if err := chatUI.ChatThreadStatus(context.Background(),
 				chat1.NewUIChatThreadStatusWithValidated()); err != nil {
 				t.Debug(ctx, "LoadNonblock: failed to set status: %s", err)
 			}
 		} else {
+			t.Debug(ctx, "LoadNonblock: clearing with none")
 			if err := chatUI.ChatThreadStatus(context.Background(),
 				chat1.NewUIChatThreadStatusWithNone()); err != nil {
 				t.Debug(ctx, "LoadNonblock: failed to set status: %s", err)
 			}
 		}
+		t.Debug(ctx, "LoadNonblock: clear complete")
+	} else {
+		t.Debug(ctx, "LoadNonblock: no status displayed, not clearing")
 	}
+
 	cancel()
 	return fullErr
 }

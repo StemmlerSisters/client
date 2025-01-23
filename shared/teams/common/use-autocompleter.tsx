@@ -1,7 +1,8 @@
 import * as React from 'react'
-import * as Kb from '../../common-adapters'
-import * as Styles from '../../styles'
-import * as Container from '../../util/container'
+import * as Kb from '@/common-adapters'
+import * as Container from '@/util/container'
+
+const positionFallbacks = ['bottom center'] as const
 
 function useAutocompleter<U>(
   items: Array<{label: string; value: U}>,
@@ -26,14 +27,14 @@ function useAutocompleter<U>(
 
   const makePopup = React.useCallback(
     (p: Kb.Popup2Parms) => {
-      const {attachTo, toggleShowingPopup} = p
+      const {attachTo, hidePopup} = p
       return (
         <Kb.Overlay
           attachTo={attachTo}
-          onHidden={toggleShowingPopup}
+          onHidden={hidePopup}
           matchDimension={true}
           position="top center"
-          positionFallbacks={['bottom center']}
+          positionFallbacks={positionFallbacks}
         >
           {itemsFiltered.map((item, idx) => (
             <Kb.ClickableBox
@@ -45,7 +46,7 @@ function useAutocompleter<U>(
               <Kb.Box2
                 direction="horizontal"
                 fullWidth={true}
-                style={Styles.collapseStyles([styles.option, selected === idx && styles.optionSelected])}
+                style={Kb.Styles.collapseStyles([styles.option, selected === idx && styles.optionSelected])}
               >
                 <Kb.Text type="BodySemibold" lineClamp={1}>
                   {item.label}
@@ -59,12 +60,12 @@ function useAutocompleter<U>(
     [onSelect, selected, itemsFiltered]
   )
 
-  const {popup, popupAnchor, toggleShowingPopup, setShowingPopup} = Kb.usePopup2(makePopup)
+  const {popup, popupAnchor, showPopup, hidePopup} = Kb.usePopup2(makePopup)
 
   const numItems = itemsFiltered.length
   const selectedItem = itemsFiltered[selected]
   const onKeyDown = React.useCallback(
-    evt => {
+    (evt: {key: string}) => {
       let diff = 0
       switch (evt.key) {
         case 'ArrowDown':
@@ -75,7 +76,7 @@ function useAutocompleter<U>(
           break
         case 'Enter':
           setSelected(0)
-          onSelect(selectedItem.value)
+          selectedItem?.value && onSelect(selectedItem.value)
           return
       }
       let newSelected = selected + diff
@@ -91,14 +92,14 @@ function useAutocompleter<U>(
     [selected, setSelected, numItems, onSelect, selectedItem]
   )
 
-  return {onKeyDown, popup, popupAnchor, setShowingPopup, toggleShowingPopup}
+  return {hidePopup, onKeyDown, popup, popupAnchor, showPopup}
 }
 
-const styles = Styles.styleSheetCreate(() => ({
-  option: {...Styles.padding(4, 10, 2), backgroundColor: Styles.globalColors.white},
-  optionOuter: {backgroundColor: Styles.globalColors.white}, // because blueLighter2 is transparent in dark mode
+const styles = Kb.Styles.styleSheetCreate(() => ({
+  option: {...Kb.Styles.padding(4, 10, 2), backgroundColor: Kb.Styles.globalColors.white},
+  optionOuter: {backgroundColor: Kb.Styles.globalColors.white}, // because blueLighter2 is transparent in dark mode
   optionSelected: {
-    backgroundColor: Styles.globalColors.blueLighter2,
+    backgroundColor: Kb.Styles.globalColors.blueLighter2,
   },
 }))
 

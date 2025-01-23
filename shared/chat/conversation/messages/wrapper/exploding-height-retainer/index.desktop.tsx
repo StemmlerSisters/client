@@ -1,14 +1,12 @@
 import * as React from 'react'
-import * as Kb from '../../../../../common-adapters'
-import * as Styles from '../../../../../styles'
-import {urlsToImgSet} from '../../../../../common-adapters/icon.desktop'
+import * as Kb from '@/common-adapters'
+import {urlsToImgSet} from '@/common-adapters/icon.desktop'
 import type {Props} from '.'
-import SharedTimer, {type SharedTimerID} from '../../../../../util/shared-timers'
-import {getAssetPath} from '../../../../../constants/platform.desktop'
+import SharedTimer, {type SharedTimerID} from '@/util/shared-timers'
+import {getAssetPath} from '@/constants/platform.desktop'
 
 const copyChildren = (children: React.ReactNode): React.ReactNode =>
-  // @ts-ignore
-  React.Children.map(children, child => (child ? React.cloneElement(child) : child))
+  React.Children.map(children, child => (child ? React.cloneElement(child as any) : child))
 
 export const animationDuration = 2000
 
@@ -21,7 +19,7 @@ type State = {
 }
 
 class ExplodingHeightRetainer extends React.PureComponent<Props, State> {
-  _boxRef = React.createRef<HTMLDivElement>()
+  _boxRef = React.createRef<Kb.MeasureRef>()
   state = {
     animating: false,
     children: this.props.retainHeight ? null : copyChildren(this.props.children), // no children if we already exploded
@@ -52,13 +50,16 @@ class ExplodingHeightRetainer extends React.PureComponent<Props, State> {
   }
 
   private setHeight() {
-    const node = this._boxRef.current
-    if (node instanceof HTMLElement) {
-      const height = node.clientHeight
-      if (height && height !== this.state.height) {
-        retainedHeights.add(this.props.messageKey)
-        this.setState({height})
-      }
+    const measure = this._boxRef.current?.measure
+    if (!measure) return
+
+    const m = measure()
+    if (!m) return
+
+    const {height} = m
+    if (height && height !== this.state.height) {
+      retainedHeights.add(this.props.messageKey)
+      this.setState({height})
     }
   }
 
@@ -66,15 +67,16 @@ class ExplodingHeightRetainer extends React.PureComponent<Props, State> {
     this.timerID && SharedTimer.removeObserver(this.props.messageKey, this.timerID)
   }
 
-  private _setBoxRef = (r: HTMLDivElement | null) => {
+  private _setBoxRef = (r: null | Kb.MeasureRef) => {
     this._boxRef = {current: r}
     this.setHeight()
   }
 
   render() {
     return (
-      <Kb.Box
-        style={Styles.collapseStyles([
+      <Kb.Box2Measure
+        direction="vertical"
+        style={Kb.Styles.collapseStyles([
           styles.container,
           this.props.style,
           // paddingRight is to compensate for the message menu
@@ -85,7 +87,7 @@ class ExplodingHeightRetainer extends React.PureComponent<Props, State> {
             position: 'relative',
           },
         ])}
-        forwardedRef={this._setBoxRef}
+        ref={this._setBoxRef}
       >
         {this.state.children}
         <Ashes
@@ -94,38 +96,45 @@ class ExplodingHeightRetainer extends React.PureComponent<Props, State> {
           explodedBy={this.props.explodedBy}
           height={this.state.height}
         />
-      </Kb.Box>
+      </Kb.Box2Measure>
     )
   }
 }
 
 const Ashes = (props: {doneExploding: boolean; exploded: boolean; explodedBy?: string; height: number}) => {
+  const {doneExploding, explodedBy, exploded, height} = props
   let explodedTag: React.ReactNode = null
-  if (props.doneExploding) {
-    explodedTag = props.explodedBy ? (
+  if (doneExploding) {
+    explodedTag = explodedBy ? (
       <Kb.Text type="BodyTiny" style={styles.exploded}>
-        EXPLODED BY{' '}
+        <Kb.Text type="BodyTiny" virtualText={true}>
+          {'EXPLODED BY '}
+        </Kb.Text>
         <Kb.ConnectedUsernames
           type="BodySmallBold"
           onUsernameClicked="profile"
-          usernames={props.explodedBy}
+          usernames={explodedBy}
           inline={true}
           colorFollowing={true}
           colorYou={true}
           underline={true}
+          virtualText={true}
         />
       </Kb.Text>
     ) : (
-      <Kb.Text type="BodyTiny" style={styles.exploded}>
+      <Kb.Text type="BodyTiny" style={styles.exploded} virtualText={true}>
         EXPLODED
       </Kb.Text>
     )
   }
 
   return (
-    <div className={Styles.classNames('ashbox', {'full-width': props.exploded})} style={styles.ashBox as any}>
-      {props.exploded && explodedTag}
-      <FlameFront height={props.height} stop={props.doneExploding} />
+    <div
+      className={Kb.Styles.classNames('ashbox', {'full-width': exploded})}
+      style={Kb.Styles.castStyleDesktop(styles.ashBox)}
+    >
+      {exploded && explodedTag}
+      <FlameFront height={height} stop={doneExploding} />
     </div>
   )
 }
@@ -140,7 +149,7 @@ const FlameFront = (props: {height: number; stop: boolean}) => {
     children.push(
       <Kb.Box key={String(i)} style={styles.flame}>
         <Kb.Animation
-          animationType={Styles.isDarkMode() ? 'darkExploding' : 'exploding'}
+          animationType={Kb.Styles.isDarkMode() ? 'darkExploding' : 'exploding'}
           width={64}
           height={64}
         />
@@ -154,18 +163,18 @@ const FlameFront = (props: {height: number; stop: boolean}) => {
   )
 }
 
-const explodedIllustrationUrl = (): string =>
-  Styles.isDarkMode()
+const explodedIllustrationUrl = () =>
+  Kb.Styles.isDarkMode()
     ? urlsToImgSet({'68': getAssetPath('images', 'icons', 'dark-pattern-ashes-desktop-400-68.png')}, 68)
     : urlsToImgSet({'68': getAssetPath('images', 'icons', 'pattern-ashes-desktop-400-68.png')}, 68)
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
-      ashBox: Styles.platformStyles({
+      ashBox: Kb.Styles.platformStyles({
         isElectron: {
-          backgroundColor: Styles.globalColors.white, // exploded messages don't have hover effects and we need to cover the message
-          backgroundImage: explodedIllustrationUrl(),
+          backgroundColor: Kb.Styles.globalColors.white, // exploded messages don't have hover effects and we need to cover the message
+          backgroundImage: explodedIllustrationUrl() ?? undefined,
           backgroundRepeat: 'repeat',
           backgroundSize: '400px 68px',
           bottom: 0,
@@ -174,14 +183,14 @@ const styles = Styles.styleSheetCreate(
           top: 0,
         },
       }),
-      container: {...Styles.globalStyles.flexBoxColumn, flex: 1},
-      exploded: Styles.platformStyles({
+      container: {...Kb.Styles.globalStyles.flexBoxColumn, flex: 1},
+      exploded: Kb.Styles.platformStyles({
         isElectron: {
-          backgroundColor: Styles.globalColors.white,
+          backgroundColor: Kb.Styles.globalColors.white,
           bottom: 0,
-          color: Styles.globalColors.black_20_on_white,
+          color: Kb.Styles.globalColors.black_20_on_white,
           padding: 2,
-          paddingLeft: Styles.globalMargins.tiny,
+          paddingLeft: Kb.Styles.globalMargins.tiny,
           paddingTop: 0,
           position: 'absolute',
           right: 0,
@@ -197,7 +206,7 @@ const styles = Styles.styleSheetCreate(
         top: -22,
         width: 64,
       },
-    } as const)
+    }) as const
 )
 
 export default ExplodingHeightRetainer

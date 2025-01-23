@@ -1,11 +1,11 @@
-import * as React from 'react'
 import './account-switcher.css'
-import * as Kb from '../../common-adapters'
-import * as Styles from '../../styles'
-import type * as ConfigTypes from '../../constants/types/config'
-import * as Constants from '../../constants/config'
+import * as Constants from '@/constants/config'
+import * as Kb from '@/common-adapters'
+import * as React from 'react'
+import type * as T from '@/constants/types'
+
 export type AccountRowItem = {
-  account: ConfigTypes.ConfiguredAccount
+  account: T.Config.ConfiguredAccount
   fullName: string
 }
 
@@ -61,14 +61,15 @@ type AccountRowProps = {
   waiting: boolean
 }
 const AccountRow = (props: AccountRowProps) => {
+  const {waiting} = props
   const [clicked, setClicked] = React.useState(false)
   React.useEffect(() => {
-    if (!props.waiting) {
+    if (!waiting) {
       setClicked(false)
     }
-  }, [setClicked, props.waiting])
+  }, [setClicked, waiting])
 
-  const onClick = props.waiting
+  const onClick = waiting
     ? undefined
     : () => {
         setClicked(true)
@@ -76,11 +77,11 @@ const AccountRow = (props: AccountRowProps) => {
       }
   return (
     <Kb.ListItem2
-      type={Styles.isMobile ? 'Large' : 'Small'}
-      icon={<Kb.Avatar size={Styles.isMobile ? 48 : 32} username={props.entry.account.username} />}
+      type={Kb.Styles.isMobile ? 'Large' : 'Small'}
+      icon={<Kb.Avatar size={Kb.Styles.isMobile ? 48 : 32} username={props.entry.account.username} />}
       firstItem={true}
       body={
-        <Kb.Box2 direction="vertical" fullWidth={true} style={props.waiting ? styles.waiting : undefined}>
+        <Kb.Box2 direction="vertical" fullWidth={true} style={waiting ? styles.waiting : undefined}>
           <Kb.Text type="BodySemibold">{props.entry.account.username}</Kb.Text>
           {(props.entry.fullName || !props.entry.account.hasStoredSecret) && (
             <Kb.Box2 direction="horizontal" alignItems="center" fullWidth={true}>
@@ -125,16 +126,16 @@ const AccountSwitcher = (props: Props) => (
   >
     <Kb.ScrollView alwaysBounceVertical={false}>
       <Kb.Box2 direction="vertical" fullWidth={true} centerChildren={true}>
-        {Styles.isMobile && <MobileHeader {...props} />}
+        {Kb.Styles.isMobile && <MobileHeader {...props} />}
         <Kb.Divider style={styles.divider} />
-        {Styles.isMobile ? (
+        {Kb.Styles.isMobile ? (
           <AccountsRows {...props} />
         ) : (
           <Kb.ScrollView style={styles.desktopScrollview} className="accountSwitcherScrollView">
             <AccountsRows {...props} />
           </Kb.ScrollView>
         )}
-        {props.accountRows.length > 0 && !Styles.isMobile && <Kb.Divider style={styles.divider} />}
+        {props.accountRows.length > 0 && !Kb.Styles.isMobile && <Kb.Divider style={styles.divider} />}
       </Kb.Box2>
     </Kb.ScrollView>
   </Kb.HeaderHocWrapper>
@@ -142,28 +143,28 @@ const AccountSwitcher = (props: Props) => (
 
 export default AccountSwitcher
 
-const styles = Styles.styleSheetCreate(() => ({
-  accountRows: Styles.platformStyles({
-    isTablet: {maxWidth: Styles.globalStyles.mediumWidth},
+const styles = Kb.Styles.styleSheetCreate(() => ({
+  accountRows: Kb.Styles.platformStyles({
+    isTablet: {maxWidth: Kb.Styles.globalStyles.mediumWidth},
   }),
-  buttonBox: Styles.padding(0, Styles.globalMargins.small, Styles.globalMargins.tiny),
+  buttonBox: Kb.Styles.padding(0, Kb.Styles.globalMargins.small, Kb.Styles.globalMargins.tiny),
   desktopScrollview: {
     width: '100%',
   },
   divider: {width: '100%'},
-  nameText: Styles.platformStyles({
+  nameText: Kb.Styles.platformStyles({
     common: {flexShrink: 1},
     isElectron: {wordBreak: 'break-all'},
   }),
   progressIndicator: {bottom: 0, position: 'absolute', right: 0},
   row: {
-    paddingBottom: -Styles.globalMargins.small,
-    paddingTop: -Styles.globalMargins.small,
+    paddingBottom: -Kb.Styles.globalMargins.small,
+    paddingTop: -Kb.Styles.globalMargins.small,
   },
   text2: {flexShrink: 0},
   userBox: {
-    paddingLeft: Styles.globalMargins.small,
-    paddingRight: Styles.globalMargins.small,
+    paddingLeft: Kb.Styles.globalMargins.small,
+    paddingRight: Kb.Styles.globalMargins.small,
     width: '100%',
   },
   waiting: {

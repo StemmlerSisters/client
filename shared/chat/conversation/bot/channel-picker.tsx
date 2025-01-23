@@ -1,41 +1,40 @@
 import * as React from 'react'
-import * as Kb from '../../../common-adapters'
-import * as Styles from '../../../styles'
-import type * as TeamTypes from '../../../constants/types/teams'
-import type * as Types from '../../../constants/types/chat2'
-import {memoize} from '../../../util/memoize'
-import {makeInsertMatcher} from '../../../util/string'
+import * as Kb from '@/common-adapters'
+import * as Styles from '@/styles'
+import type * as T from '@/constants/types'
+import {makeInsertMatcher} from '@/util/string'
 
 type Props = {
-  channelMetas: Map<Types.ConversationIDKey, Types.ConversationMeta>
-  installInConvs: string[]
+  channelMetas: Map<T.Chat.ConversationIDKey, T.Chat.ConversationMeta>
+  installInConvs: ReadonlyArray<string>
   setChannelPickerScreen: (show: boolean) => void
-  setInstallInConvs: (convs: string[]) => void
+  setInstallInConvs: (convs: ReadonlyArray<string>) => void
   setDisableDone: (disable: boolean) => void
-  teamID: TeamTypes.TeamID
+  teamID: T.Teams.TeamID
   teamName: string
 }
 
-const getChannels = memoize(
-  (channelMetas: Map<Types.ConversationIDKey, Types.ConversationMeta>, searchText: string) => {
-    const matcher = makeInsertMatcher(searchText)
-    const regex = new RegExp(searchText, 'i')
-    return [...channelMetas.values()]
-      .filter(({channelname, description}) => {
-        if (!searchText) {
-          return true // no search text means show all
-        }
-        return (
-          // match channel name for search as subsequence (like the identity modal)
-          // match channel desc by strict substring (less noise in results)
-          channelname.match(matcher) || description.match(regex)
-        )
-      })
-      .sort((a, b) => a.channelname.localeCompare(b.channelname))
-  }
-)
+const getChannels = (
+  channelMetas: Map<T.Chat.ConversationIDKey, T.Chat.ConversationMeta>,
+  searchText: string
+) => {
+  const matcher = makeInsertMatcher(searchText)
+  const regex = new RegExp(searchText, 'i')
+  return [...channelMetas.values()]
+    .filter(({channelname, description}) => {
+      if (!searchText) {
+        return true // no search text means show all
+      }
+      return (
+        // match channel name for search as subsequence (like the identity modal)
+        // match channel desc by strict substring (less noise in results)
+        channelname.search(matcher) !== -1 || description.search(regex) !== -1
+      )
+    })
+    .sort((a, b) => a.channelname.localeCompare(b.channelname))
+}
 
-const toggleChannel = (convID: string, installInConvs: string[]) => {
+const toggleChannel = (convID: string, installInConvs: ReadonlyArray<string>) => {
   if (installInConvs.includes(convID)) {
     return installInConvs.filter(id => id !== convID)
   } else {
@@ -100,7 +99,11 @@ const ChannelPicker = (props: Props) => {
     setDisableDone(false)
   }, [allSelected, installInConvs, setDisableDone])
 
-  const rows = getChannels(props.channelMetas, searchText).map(meta => (
+  const channels = React.useMemo(
+    () => getChannels(props.channelMetas, searchText),
+    [props.channelMetas, searchText]
+  )
+  const rows = channels.map(meta => (
     <Row
       disabled={allSelected}
       key={meta.conversationIDKey}
@@ -176,7 +179,7 @@ const styles = Styles.styleSheetCreate(
           marginRight: Styles.globalMargins.small,
         },
       }),
-    } as const)
+    }) as const
 )
 
 export default ChannelPicker

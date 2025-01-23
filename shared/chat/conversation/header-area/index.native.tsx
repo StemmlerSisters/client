@@ -1,30 +1,37 @@
-import * as Chat2Gen from '../../../actions/chat2-gen'
-import * as Constants from '../../../constants/chat2'
-import * as Container from '../../../util/container'
-import * as Kb from '../../../common-adapters'
-import * as ProfileGen from '../../../actions/profile-gen'
+import * as C from '@/constants'
+import * as Kb from '@/common-adapters'
 import * as React from 'react'
-import * as RouteTreeGen from '../../../actions/route-tree-gen'
-import * as Styles from '../../../styles'
-import shallowEqual from 'shallowequal'
-import type * as Types from '../../../constants/types/chat2'
-import {assertionToDisplay} from '../../../common-adapters/usernames'
-import {getFullname} from '../../../constants/users'
+import * as Styles from '@/styles'
+import {assertionToDisplay} from '@/common-adapters/usernames'
+import {useWindowDimensions} from 'react-native'
+
+export const useBackBadge = () => {
+  const visiblePath = C.Router2.getVisiblePath()
+  const onTopOfInbox = visiblePath[visiblePath.length - 2]?.name === 'chatRoot'
+  const badgeCountsChanged = C.useChatState(s => s.badgeCountsChanged)
+  const conversationIDKey = C.useChatContext(s => s.id)
+  const badgeNumber = React.useMemo(() => {
+    if (!onTopOfInbox) return 0
+    const badgeMap = C.useChatState.getState().getBadgeMap(badgeCountsChanged)
+    return [...badgeMap.entries()].reduce(
+      (res, [currentConvID, currentValue]) =>
+        // only show sum of badges that aren't for the current conversation
+        currentConvID !== conversationIDKey ? res + currentValue : res,
+      0
+    )
+  }, [badgeCountsChanged, onTopOfInbox, conversationIDKey])
+  return badgeNumber
+}
 
 const shhIconColor = Styles.globalColors.black_20
 const shhIconFontSize = 24
 
-type Props = {
-  conversationIDKey: Types.ConversationIDKey
-}
-
-const ShhIcon = (p: Props) => {
-  const {conversationIDKey} = p
-  const isMuted = Container.useSelector(state => Constants.getMeta(state, conversationIDKey).isMuted)
-  const dispatch = Container.useDispatch()
+const ShhIcon = React.memo(function ShhIcon() {
+  const isMuted = C.useChatContext(s => s.meta.isMuted)
+  const mute = C.useChatContext(s => s.dispatch.mute)
   const unMuteConversation = React.useCallback(() => {
-    dispatch(Chat2Gen.createMuteConversation({conversationIDKey, muted: false}))
-  }, [dispatch, conversationIDKey])
+    mute(false)
+  }, [mute])
   return isMuted ? (
     <Kb.Icon
       type="iconfont-shh"
@@ -34,28 +41,37 @@ const ShhIcon = (p: Props) => {
       onClick={unMuteConversation}
     />
   ) : null
+})
+
+const useMaxWidthStyle = () => {
+  const {width} = useWindowDimensions()
+  const hasBadge = useBackBadge() > 0
+  return React.useMemo(() => ({maxWidth: width - 140 - (hasBadge ? 40 : 0)}), [width, hasBadge])
 }
 
-const ChannelHeader = (p: Props) => {
-  const {conversationIDKey} = p
-  const {channelname, smallTeam, teamname, teamID} = Container.useSelector(state => {
-    const meta = Constants.getMeta(state, conversationIDKey)
-    const {channelname, teamname, teamType, teamID} = meta
-    const smallTeam = teamType !== 'big'
-    return {channelname, smallTeam, teamID, teamname}
-  }, shallowEqual)
-
+const ChannelHeader = () => {
+  const {channelname, smallTeam, teamname, teamID} = C.useChatContext(
+    C.useShallow(s => {
+      const meta = s.meta
+      const {channelname, teamname, teamType, teamID} = meta
+      const smallTeam = teamType !== 'big'
+      return {channelname, smallTeam, teamID, teamname}
+    })
+  )
   const textType = smallTeam ? 'BodyBig' : Styles.isMobile ? 'BodyTinySemibold' : 'BodySemibold'
-
-  const dispatch = Container.useDispatch()
+  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
   const onClick = React.useCallback(() => {
-    dispatch(RouteTreeGen.createNavigateAppend({path: [{props: {teamID}, selected: 'team'}]}))
-  }, [dispatch, teamID])
+    navigateAppend({props: {teamID}, selected: 'team'})
+  }, [navigateAppend, teamID])
+  const maxWidthStyle = useMaxWidthStyle()
 
   return (
-    <Kb.Box2 direction="vertical">
+    <Kb.Box2 direction="vertical" style={maxWidthStyle}>
       <Kb.Box2 direction="horizontal" style={styles.channelHeaderContainer}>
-        <Kb.Avatar teamname={teamname || undefined} size={smallTeam ? 16 : (12 as any)} />
+        <Kb.Avatar
+          teamname={teamname || undefined}
+          size={smallTeam ? 16 : (12 as 16) /* not really allowed a one off */}
+        />
         <Kb.Text
           type={textType}
           lineClamp={1}
@@ -66,46 +82,53 @@ const ChannelHeader = (p: Props) => {
           &nbsp;
           {teamname}
         </Kb.Text>
-        {smallTeam && <ShhIcon conversationIDKey={conversationIDKey} />}
+        {smallTeam && <ShhIcon />}
       </Kb.Box2>
       {!smallTeam && (
         <Kb.Box2 direction="horizontal" style={styles.channelHeaderContainer}>
           <Kb.Text type="BodyBig" style={styles.channelName} lineClamp={1} ellipsizeMode="tail">
             #{channelname}
           </Kb.Text>
-          <ShhIcon conversationIDKey={conversationIDKey} />
+          <ShhIcon />
         </Kb.Box2>
       )}
     </Kb.Box2>
   )
 }
 
-const emptyArray = []
-const UsernameHeader = (p: Props) => {
-  const {conversationIDKey} = p
-  const {participants, theirFullname} = Container.useSelector(state => {
-    const meta = Constants.getMeta(state, conversationIDKey)
-    const participants =
-      (meta.teamname ? null : Constants.getParticipantInfo(state, conversationIDKey).name) || emptyArray
-    const theirFullname =
-      participants?.length === 2
-        ? participants
-            .filter(username => username !== state.config.username)
-            .map(username => getFullname(state, username))[0]
-        : undefined
-
-    return {participants, theirFullname}
-  }, shallowEqual)
-  const dispatch = Container.useDispatch()
+const emptyArray = new Array<string>()
+const UsernameHeader = () => {
+  const you = C.useCurrentUserState(s => s.username)
+  const infoMap = C.useUsersState(s => s.infoMap)
+  const participantInfo = C.useChatContext(s => s.participants)
+  const {participants, theirFullname} = C.useChatContext(
+    C.useShallow(s => {
+      const meta = s.meta
+      const participants = meta.teamname ? emptyArray : participantInfo.name
+      const theirFullname =
+        participants.length === 2
+          ? participants
+              .filter(username => username !== you)
+              .map(username => infoMap.get(username)?.fullname)[0]
+          : undefined
+      return {participants, theirFullname}
+    })
+  )
+  const showUserProfile = C.useProfileState(s => s.dispatch.showUserProfile)
   const onShowProfile = React.useCallback(
     (username: string) => {
-      dispatch(ProfileGen.createShowUserProfile({username}))
+      showUserProfile(username)
     },
-    [dispatch]
+    [showUserProfile]
   )
 
+  const maxWidthStyle = useMaxWidthStyle()
+
   return (
-    <Kb.Box2 direction={theirFullname ? 'vertical' : 'horizontal'} style={styles.usernameHeaderContainer}>
+    <Kb.Box2
+      direction={theirFullname ? 'vertical' : 'horizontal'}
+      style={Styles.collapseStyles([styles.usernameHeaderContainer, maxWidthStyle])}
+    >
       {!!theirFullname && (
         <Kb.Text lineClamp={1} type="BodyBig" fixOverdraw={true}>
           {theirFullname}
@@ -123,29 +146,30 @@ const UsernameHeader = (p: Props) => {
           onUsernameClicked={onShowProfile}
           skipSelf={participants.length > 1}
         />
-        <ShhIcon conversationIDKey={conversationIDKey} />
+        <ShhIcon />
       </Kb.Box2>
     </Kb.Box2>
   )
 }
 
-const PhoneOrEmailHeader = (p: Props) => {
-  const {conversationIDKey} = p
-  const participantInfo = Container.useSelector(state =>
-    Constants.getParticipantInfo(state, conversationIDKey)
-  )
-  const meta = Container.useSelector(state => Constants.getMeta(state, conversationIDKey))
+const PhoneOrEmailHeader = () => {
+  const participantInfo = C.useChatContext(s => s.participants)
+  const meta = C.useChatContext(s => s.meta)
   const participants = (meta.teamname ? null : participantInfo.name) || emptyArray
   const phoneOrEmail = participants.find(s => s.endsWith('@phone') || s.endsWith('@email')) || ''
   const formattedPhoneOrEmail = assertionToDisplay(phoneOrEmail)
   const name = participantInfo.contactName.get(phoneOrEmail)
+  const maxWidthStyle = useMaxWidthStyle()
   return (
-    <Kb.Box2 direction="vertical" style={styles.usernameHeaderContainer}>
+    <Kb.Box2
+      direction="vertical"
+      style={Styles.collapseStyles([styles.usernameHeaderContainer, maxWidthStyle])}
+    >
       <Kb.Box2 direction="horizontal" style={styles.lessMargins}>
         <Kb.Text type="BodyBig" lineClamp={1} ellipsizeMode="middle">
           {formattedPhoneOrEmail}
         </Kb.Text>
-        <ShhIcon conversationIDKey={conversationIDKey} />
+        <ShhIcon />
       </Kb.Box2>
       {!!name && <Kb.Text type="BodyTiny">{name}</Kb.Text>}
     </Kb.Box2>
@@ -175,7 +199,7 @@ const styles = Styles.styleSheetCreate(
       },
       shhIcon: {marginLeft: Styles.globalMargins.xtiny},
       usernameHeaderContainer: {alignItems: 'center', justifyContent: 'center'},
-    } as const)
+    }) as const
 )
 
 export {ChannelHeader, PhoneOrEmailHeader, UsernameHeader}

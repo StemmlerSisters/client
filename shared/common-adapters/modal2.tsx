@@ -1,5 +1,5 @@
 import * as React from 'react'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 import ScrollView from './scroll-view'
 import {Box2, Box, type LayoutEvent} from './box'
 import BoxGrow from './box-grow'
@@ -74,7 +74,7 @@ const Header2 = (props: HeaderProps) => {
   const sideWidth = widerWidth + headerSidePadding * 2
   // end mobile only
 
-  let subTitle
+  let subTitle: React.ReactNode = null
   if (props.subTitle) {
     subTitle =
       typeof props.subTitle === 'string' ? (
@@ -146,19 +146,6 @@ const Header2 = (props: HeaderProps) => {
     </Kb.Box2>
   )
 }
-
-export const useModalHeaderTitleAndCancel = (title: string, onCancel: () => void): HeaderProps =>
-  React.useMemo(
-    () => ({
-      leftButton: (
-        <Kb.Text type="BodyBigLink" onClick={onCancel}>
-          Cancel
-        </Kb.Text>
-      ),
-      title,
-    }),
-    [title, onCancel]
-  )
 
 const Footer = (props: FooterProps & {wide: boolean}) => (
   <Kb.Box2
@@ -266,4 +253,3 @@ const styles = Styles.styleSheetCreate(() => {
 })
 
 export default Modal2
-export {Header2}

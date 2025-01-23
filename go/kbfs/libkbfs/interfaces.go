@@ -25,6 +25,7 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/keybase1"
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	metrics "github.com/rcrowley/go-metrics"
 	billy "gopkg.in/src-d/go-billy.v4"
 )
@@ -748,6 +749,10 @@ type KeybaseService interface {
 
 	// GetKVStoreClient returns a client for accessing the KVStore service.
 	GetKVStoreClient() keybase1.KvstoreInterface
+
+	// GetKeybaseDaemonRawClient returns the raw RPC client that can be used to
+	// construct protocol clients.
+	GetKeybaseDaemonRawClient() rpc.GenericClient
 
 	// Shutdown frees any resources associated with this
 	// instance. No other methods may be called after this is
@@ -2199,6 +2204,11 @@ type kbContextGetter interface {
 	KbContext() Context
 }
 
+// ResetForLoginer defines ResetForLogin.
+type ResetForLoginer interface {
+	ResetForLogin(ctx context.Context, username libkb.NormalizedUsername) (err error)
+}
+
 // Config collects all the singleton instance instantiations needed to
 // run KBFS in one place.  The methods below are self-explanatory and
 // do not require comments.
@@ -2391,6 +2401,12 @@ type Config interface {
 	KbEnv() *libkb.Env
 
 	kbContextGetter
+
+	// AddResetForLoginTarget adds t as a target when config.ResetForLogin is called.
+	AddResetForLoginTarget(t ResetForLoginer)
+
+	// ResetForLogin calls ResetForLogin on additional protocols.
+	ResetForLogin(context.Context, libkb.NormalizedUsername)
 }
 
 // NodeCache holds Nodes, and allows libkbfs to update them when

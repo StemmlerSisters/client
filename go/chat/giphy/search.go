@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/keybase/client/go/chat/globals"
+	"github.com/keybase/client/go/chat/storage"
 	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
@@ -75,7 +77,7 @@ func formatResponse(mctx libkb.MetaContext, response giphyResponse, srv types.At
 			if typ != "fixed_height" {
 				continue
 			}
-			searchRes.PreviewUrl, searchRes.PreviewIsVideo, err = getPreferredPreview(mctx, img)
+			searchRes.PreferredPreviewUrl, searchRes.PreviewIsVideo, err = getPreferredPreview(mctx, img)
 			if err != nil {
 				continue
 			}
@@ -87,7 +89,7 @@ func formatResponse(mctx libkb.MetaContext, response giphyResponse, srv types.At
 			if err != nil {
 				continue
 			}
-			searchRes.PreviewUrl = srv.GetGiphyURL(mctx.Ctx(), searchRes.PreviewUrl)
+			searchRes.PreviewUrl = srv.GetGiphyURL(mctx.Ctx(), searchRes.PreferredPreviewUrl)
 			foundPreview = true
 			break
 		}
@@ -173,26 +175,61 @@ func Asset(mctx libkb.MetaContext, sourceURL string) (res io.ReadCloser, length 
 	}
 	req.Header.Add("Accept", "image/*")
 	req.Host = MediaHost
-	resp, err := ctxhttp.Do(mctx.Ctx(), WebClient(mctx), req)
+	resp, err := ctxhttp.Do(mctx.Ctx(), AssetClient(mctx), req)
 	if err != nil {
 		return nil, 0, err
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, 0, fmt.Errorf("Status %s", resp.Status)
 	}
 	return resp.Body, resp.ContentLength, nil
 }
 
-func Search(mctx libkb.MetaContext, apiKeySource types.ExternalAPIKeySource, query *string, limit int,
+func Search(g *globals.Context, mctx libkb.MetaContext, apiKeySource types.ExternalAPIKeySource, query *string, limit int,
 	srv types.AttachmentURLSrv) (res []chat1.GiphySearchResult, err error) {
 	var endpoint string
 	apiKey, err := apiKeySource.GetKey(mctx.Ctx(), chat1.ExternalAPIKeyTyp_GIPHY)
 	if err != nil {
 		return res, err
 	}
-	if query == nil {
-		// grab trending with no query
-		endpoint = fmt.Sprintf("%s/v1/gifs/trending?api_key=%s&limit=%d", giphyProxy, apiKey.Giphy(), limit)
-	} else {
+	if query != nil {
 		endpoint = fmt.Sprintf("%s/v1/gifs/search?api_key=%s&q=%s&limit=%d", giphyProxy, apiKey.Giphy(),
 			url.QueryEscape(*query), limit)
+		return runAPICall(mctx, endpoint, srv)
 	}
-	return runAPICall(mctx, endpoint, srv)
+
+	// If we have no query first check the local store for recently used results.
+	recentlyUsedLimit := 7
+	if mctx.G().IsMobileAppType() {
+		recentlyUsedLimit = 3
+	}
+
+	results := storage.NewGiphyStore(g).GiphyResults(mctx.Ctx(), mctx.CurrentUID().ToBytes(), recentlyUsedLimit)
+	// Refresh the local url for any previously cached results.
+	seenPreviewURLs := make(map[string]bool)
+	for i, result := range results {
+		result.PreviewUrl = srv.GetGiphyURL(mctx.Ctx(), result.PreferredPreviewUrl)
+		results[i] = result
+		seenPreviewURLs[result.PreviewUrl] = true
+	}
+
+	if len(results) > limit {
+		results = results[:limit]
+	} else if len(results) < limit { // grab trending if we don't have enough recents
+		limit -= len(results)
+		endpoint = fmt.Sprintf("%s/v1/gifs/trending?api_key=%s&limit=%d", giphyProxy, apiKey.Giphy(), limit)
+		trendingResults, err := runAPICall(mctx, endpoint, srv)
+		if err != nil {
+			return nil, err
+		}
+		// Filter out any results already from the cached response.
+		for _, result := range trendingResults {
+			if !seenPreviewURLs[result.PreviewUrl] {
+				results = append(results, result)
+				seenPreviewURLs[result.PreviewUrl] = true
+			}
+		}
+	}
+	return results, nil
 }

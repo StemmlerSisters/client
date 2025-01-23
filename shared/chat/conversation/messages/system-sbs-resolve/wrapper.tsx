@@ -1,23 +1,20 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Constants from '../../../../constants/chat2'
-import * as Container from '../../../../util/container'
-import {ConvoIDContext} from '../ids-context'
 import {WrapperMessage, useCommon, type Props} from '../wrapper/wrapper'
 import type SystemSBSResolvedType from './container'
 import type SystemJoinedType from '../system-joined/container'
 
 const WrapperSystemInvite = React.memo(function WrapperSystemInvite(p: Props) {
   const {ordinal} = p
-  const conversationIDKey = React.useContext(ConvoIDContext)
   const common = useCommon(ordinal)
-  const message = Container.useSelector(state => Constants.getMessage(state, conversationIDKey, ordinal))
-  const you = Container.useSelector(state => state.config.username)
+  const message = C.useChatContext(s => s.messageMap.get(ordinal))
+  const you = C.useCurrentUserState(s => s.username)
 
   if (message?.type !== 'systemSBSResolved') return null
 
   const youAreAuthor = you === message.author
-  const SystemSBSResolved = require('./container').default as typeof SystemSBSResolvedType
-  const SystemJoined = require('../system-joined/container').default as typeof SystemJoinedType
+  const {default: SystemSBSResolved} = require('./container') as {default: typeof SystemSBSResolvedType}
+  const {default: SystemJoined} = require('../system-joined/container') as {default: typeof SystemJoinedType}
   const child = youAreAuthor ? (
     <SystemSBSResolved key="systemSbsResolved" message={message} />
   ) : (

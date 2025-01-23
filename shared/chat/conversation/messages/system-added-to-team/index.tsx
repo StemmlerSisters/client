@@ -1,16 +1,15 @@
-import * as Kb from '../../../../common-adapters'
-import * as Styles from '../../../../styles'
+import * as C from '@/constants'
+import * as Kb from '@/common-adapters'
 import UserNotice from '../user-notice'
-import type * as TeamTypes from '../../../../constants/types/teams'
-import {typeToLabel} from '../../../../constants/teams'
+import type * as T from '@/constants/types'
 import {getAddedUsernames} from '../system-users-added-to-conv'
-import {indefiniteArticle} from '../../../../util/string'
+import {indefiniteArticle} from '@/util/string'
 
 type Props = {
   addee: string
   adder: string
-  bulkAdds: Array<string>
-  role: TeamTypes.MaybeTeamRoleType
+  bulkAdds?: ReadonlyArray<string>
+  role: T.Teams.MaybeTeamRoleType
   onManageNotifications: () => void
   onViewBot: () => void
   onViewTeam: () => void
@@ -21,7 +20,7 @@ type Props = {
   isAdmin: boolean
 }
 
-const isBot = (role: TeamTypes.MaybeTeamRoleType) => {
+const isBot = (role: T.Teams.MaybeTeamRoleType) => {
   return role === 'bot' || role === 'restrictedbot'
 }
 
@@ -33,7 +32,7 @@ const ManageComponent = (props: Props) => {
   }
   if (props.addee === props.you) {
     return (
-      <Kb.Box style={{...Styles.globalStyles.flexBoxColumn}}>
+      <Kb.Box style={{...Kb.Styles.globalStyles.flexBoxColumn}}>
         <Kb.Text onClick={props.onManageNotifications} type={textType}>
           Manage phone and computer notifications
         </Kb.Text>
@@ -69,7 +68,8 @@ const youOrUsername = (props: {username: string; you: string; capitalize: boolea
 }
 
 const AddedToTeam = (props: Props) => {
-  const role = props.role !== 'none' && isBot(props.role) ? typeToLabel[props.role].toLowerCase() : null
+  const role =
+    props.role !== 'none' && isBot(props.role) ? C.Teams.typeToLabel[props.role].toLowerCase() : null
   if (props.addee === props.you) {
     return <YouAddedToTeam {...props} />
   }
@@ -77,7 +77,7 @@ const AddedToTeam = (props: Props) => {
     <UserNotice>
       <Kb.Text type="BodySmall">
         {youOrUsername({capitalize: true, username: props.adder, you: props.you})}added{' '}
-        {getAddedUsernames(props.bulkAdds.length === 0 ? [props.addee] : props.bulkAdds)}
+        {getAddedUsernames(props.bulkAdds?.length ? props.bulkAdds : [props.addee])}
         {props.isTeam && ' to the team'}
         {role && ` as ${indefiniteArticle(role)} ${role}`}. <ManageComponent {...props} />
       </Kb.Text>
@@ -96,15 +96,15 @@ const YouAddedToTeam = (props: Props) => {
         {teamname && (
           <Kb.Text
             onClick={onViewTeam}
-            style={{color: Styles.globalColors.black_50}}
+            style={{color: Kb.Styles.globalColors.black_50}}
             type="BodySmallSemiboldSecondaryLink"
           >
             {teamname}
           </Kb.Text>
         )}
         {role !== 'none' &&
-          typeToLabel[role] &&
-          ` as ${indefiniteArticle(props.role)} ${typeToLabel[role].toLowerCase()}`}
+          C.Teams.typeToLabel[role] &&
+          ` as ${indefiniteArticle(props.role)} ${C.Teams.typeToLabel[role].toLowerCase()}`}
         .
       </Kb.Text>
       <ManageComponent {...props} />

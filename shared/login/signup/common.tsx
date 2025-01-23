@@ -1,7 +1,7 @@
+import * as C from '@/constants'
 import * as React from 'react'
-import * as Constants from '../../constants/signup'
-import {Box2, Avatar, WaitingButton, Input as CommonInput, ButtonBar} from '../../common-adapters'
-import {styleSheetCreate, isMobile, globalMargins, globalColors} from '../../styles'
+import {Box2, WaitingButton, ButtonBar} from '@/common-adapters'
+import {styleSheetCreate, isMobile, globalMargins, globalColors} from '@/styles'
 
 type Props = {
   children: React.ReactNode
@@ -23,8 +23,6 @@ export const Wrapper = (props: Props) => (
   </Box2>
 )
 
-export const BlankAvatar = () => <Avatar username="" size={isMobile ? 96 : 128} style={styles.avatar} />
-
 export const ContinueButton = ({
   disabled,
   label,
@@ -36,7 +34,7 @@ export const ContinueButton = ({
 }) => (
   <ButtonBar fullWidth={true} style={styles.buttonBar}>
     <WaitingButton
-      waitingKey={Constants.waitingKey}
+      waitingKey={C.Signup.waitingKey}
       label={label || 'Continue'}
       disabled={disabled}
       fullWidth={true}
@@ -45,18 +43,7 @@ export const ContinueButton = ({
   </ButtonBar>
 )
 
-export const Input = (props: any) => (
-  <Box2 direction="vertical" style={styles.inputContainer}>
-    <CommonInput
-      style={styles.input}
-      inputStyle={styles.inputInnerStyle}
-      errorStyle={styles.inputErrorStyle}
-      {...props}
-    />
-  </Box2>
-)
-
-export const styles = styleSheetCreate(
+const styles = styleSheetCreate(
   () =>
     ({
       avatar: {marginBottom: isMobile ? globalMargins.xtiny : 0},
@@ -74,5 +61,5 @@ export const styles = styleSheetCreate(
       inputErrorStyle: {minHeight: 0},
       inputInnerStyle: {width: '100%'},
       wrapper: {paddingLeft: globalMargins.medium, paddingRight: globalMargins.medium},
-    } as const)
+    }) as const
 )

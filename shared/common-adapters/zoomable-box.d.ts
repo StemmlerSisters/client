@@ -1,16 +1,28 @@
-import * as React from 'react'
+import type * as React from 'react'
+import type * as Styles from '@/styles'
+import type {LayoutChangeEvent} from 'react-native'
 
 export type Props = {
   maxZoom?: number
   minZoom?: number
-  onZoom?: ((arg0: {height: number; width: number; x: number; y: number}) => void) | null
-  style?: any
+  zoomScale?: number
+  contentSize?:
+    | {
+        width: number
+        height: number
+      }
+    | undefined
+  onLayout?: (e: Partial<LayoutChangeEvent>) => void
+  onZoom?: (e: {height: number; width: number; x: number; y: number; scale: number}) => void
+  style?: Styles.StylesCrossPlatform
   bounces?: boolean
   children?: React.ReactNode
   key?: React.Key
   showsVerticalScrollIndicator?: boolean
   showsHorizontalScrollIndicator?: boolean
-  contentContainerStyle?: any
+  contentContainerStyle?: Styles.StylesCrossPlatform
+  onSwipe?: (left: boolean) => void
+  onTap?: () => void
 }
 
-export class ZoomableBox extends React.Component<Props> {}
+declare const ZoomableBox: (p: Props) => React.ReactNode

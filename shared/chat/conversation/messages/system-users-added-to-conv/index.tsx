@@ -1,5 +1,4 @@
-import * as Kb from '../../../../common-adapters'
-import * as Styles from '../../../../styles'
+import * as Kb from '@/common-adapters'
 import UserNotice from '../user-notice'
 
 type YouAddedProps = {
@@ -23,7 +22,8 @@ const YouAdded = (props: YouAddedProps) => (
 )
 
 const maxUsernamesToShow = 1
-const getAddedUsernames = (usernames: Array<string>) => {
+const getAddedUsernames = (usernames?: ReadonlyArray<string>) => {
+  if (!usernames) return []
   const diff = Math.max(0, usernames.length - maxUsernamesToShow)
   const othersStr = diff ? ` and ${diff} other${diff > 1 ? 's' : ''}` : ''
   const users = usernames.slice(0, maxUsernamesToShow)
@@ -54,7 +54,7 @@ const getAddedUsernames = (usernames: Array<string>) => {
 type OthersAddedProps = {
   author: string
   channelname: string
-  added: Array<string>
+  added: ReadonlyArray<string>
   timestamp: number
 }
 
@@ -66,11 +66,11 @@ const OthersAdded = (props: OthersAddedProps) => (
   </UserNotice>
 )
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
       text: {flexGrow: 1},
-    } as const)
+    }) as const
 )
 
 export {OthersAdded, YouAdded, getAddedUsernames}

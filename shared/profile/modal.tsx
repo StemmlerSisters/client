@@ -1,18 +1,20 @@
 import * as React from 'react'
-import * as Kb from '../common-adapters'
-import * as Styles from '../styles'
+import * as Kb from '@/common-adapters'
 
 type Props = React.PropsWithChildren<{
   onCancel?: () => void
   skipButton?: boolean
+  title?: string
 }>
 
-const Modal = ({children, onCancel, skipButton}: Props) => (
-  <Kb.PopupWrapper onCancel={onCancel}>
+const Modal = ({children, onCancel, skipButton, title}: Props) => (
+  <Kb.PopupWrapper onCancel={onCancel} title={title}>
     <Kb.Box2 direction="vertical" style={styles.container} fullWidth={true}>
-      <Kb.Box2 direction="vertical" style={styles.content} fullWidth={true} alignItems="center">
-        {children}
-      </Kb.Box2>
+      <Kb.ScrollView>
+        <Kb.Box2 direction="vertical" style={styles.content} fullWidth={true} alignItems="center">
+          {children}
+        </Kb.Box2>
+      </Kb.ScrollView>
       {onCancel && !skipButton && (
         <Kb.Box2 direction="vertical" fullWidth={true} style={styles.buttonBar} alignItems="center">
           <Kb.Button type="Dim" label="Cancel" onClick={onCancel} />
@@ -22,23 +24,23 @@ const Modal = ({children, onCancel, skipButton}: Props) => (
   </Kb.PopupWrapper>
 )
 
-const styles = Styles.styleSheetCreate(
+const styles = Kb.Styles.styleSheetCreate(
   () =>
     ({
       buttonBar: {
         flexShrink: 0,
-        padding: Styles.isMobile ? undefined : Styles.globalMargins.medium,
+        padding: Kb.Styles.isMobile ? undefined : Kb.Styles.globalMargins.medium,
       },
       container: {
-        minHeight: Styles.isMobile ? undefined : 450,
-        padding: Styles.isMobile ? Styles.globalMargins.tiny : Styles.globalMargins.medium,
-        width: Styles.isMobile ? undefined : 560,
+        minHeight: Kb.Styles.isMobile ? undefined : 450,
+        padding: Kb.Styles.isMobile ? Kb.Styles.globalMargins.tiny : Kb.Styles.globalMargins.medium,
+        width: Kb.Styles.isMobile ? undefined : 560,
       },
       content: {
         flexGrow: 1,
         justifyContent: 'space-around',
       },
-    } as const)
+    }) as const
 )
 
 export default Modal

@@ -1,15 +1,14 @@
-import type {ConversationIDKey} from '../../../constants/types/chat2'
-import type * as RPCChatTypes from '../../../constants/types/rpc-chat-gen'
+import type {ConversationIDKey} from '@/constants/types/chat2'
+import type * as T from '@/constants/types'
 
 export type ChatInboxRowItemSmall = {
   type: 'small'
   teamname: string
   isTeam: boolean
   conversationIDKey: ConversationIDKey
-  selected: boolean
   time: number
   snippet?: string
-  snippetDecoration: RPCChatTypes.SnippetDecoration
+  snippetDecoration: T.RPCChat.SnippetDecoration
 }
 export type ChatInboxRowItemBigTeamsLabel = {
   type: 'bigTeamsLabel'
@@ -18,27 +17,27 @@ export type ChatInboxRowItemBigTeamsLabel = {
   teamname?: never
   conversationIDKey?: never
   snippet?: string
-  snippetDecoration: RPCChatTypes.SnippetDecoration
+  snippetDecoration: T.RPCChat.SnippetDecoration
   time?: number
 }
 export type ChatInboxRowItemBigHeader = {
+  conversationIDKey?: never
   type: 'bigHeader'
   isTeam?: boolean
   teamname: string
   teamID: string
   snippet?: string
-  snippetDecoration: RPCChatTypes.SnippetDecoration
+  snippetDecoration: T.RPCChat.SnippetDecoration
   time?: number
 }
 export type ChatInboxRowItemBig = {
   type: 'big'
   isTeam?: boolean
   conversationIDKey: ConversationIDKey
-  selected: boolean
   teamname: string
   channelname: string
   snippet?: string
-  snippetDecoration: RPCChatTypes.SnippetDecoration
+  snippetDecoration: T.RPCChat.SnippetDecoration
   time?: number
 }
 export type ChatInboxRowItemDivider = {

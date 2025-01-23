@@ -1,18 +1,11 @@
+import * as C from '@/constants'
+import * as Container from '@/util/container'
 import * as React from 'react'
-import * as LoginGen from '../../actions/login-gen'
-import * as RouteTreeGen from '../../actions/route-tree-gen'
-import * as ProvisionGen from '../../actions/provision-gen'
-import * as SignupGen from '../../actions/signup-gen'
-import * as RecoverPasswordGen from '../../actions/recover-password-gen'
-import HiddenString from '../../util/hidden-string'
 import Login from '.'
 import sortBy from 'lodash/sortBy'
-import * as Container from '../../util/container'
-import type * as ConfigTypes from '../../constants/types/config'
+import type * as T from '@/constants/types'
 
 const needPasswordError = 'passphrase cannot be empty'
-
-type OwnProps = {}
 
 type Props = {
   error: string
@@ -23,62 +16,63 @@ type Props = {
   onSignup: () => void
   onSomeoneElse: () => void
   selectedUser: string
-  users: Array<ConfigTypes.ConfiguredAccount>
+  users: Array<T.Config.ConfiguredAccount>
 }
 
 const LoginWrapper = (props: Props) => {
+  const {onLogin, loggedInMap, error, selectedUser: pselectedUser} = props
+
   const [password, setPassword] = React.useState('')
-  const [selectedUser, setSelectedUser] = React.useState(props.selectedUser)
+  const [selectedUser, setSelectedUser] = React.useState(pselectedUser)
   const [showTyping, setShowTyping] = React.useState(false)
 
   const prevPassword = Container.usePrevious(password)
-  const prevError = Container.usePrevious(props.error)
+  const prevError = Container.usePrevious(error)
 
   const [gotNeedPasswordError, setGotNeedPasswordError] = React.useState(false)
-
-  const dispatch = Container.useDispatch()
-
-  const {onLogin, loggedInMap} = props
 
   const onSubmit = React.useCallback(() => {
     onLogin(selectedUser, password)
   }, [selectedUser, password, onLogin])
 
+  const loginError = C.useConfigState(s => s.dispatch.loginError)
+
   const selectedUserChange = React.useCallback(
-    user => {
-      dispatch(LoginGen.createLoginError({}))
+    (user: string) => {
+      loginError()
       setPassword('')
       setSelectedUser(user)
       if (loggedInMap.get(user)) {
         onLogin(user, '')
       }
     },
-    [dispatch, setPassword, setSelectedUser, onLogin, loggedInMap]
+    [loginError, setPassword, setSelectedUser, onLogin, loggedInMap]
   )
 
   // Effects
   React.useEffect(() => {
-    if (!prevError && !!props.error) {
+    if (!prevError && !!error) {
       setPassword('')
     }
-  }, [prevError, props.error, setPassword])
+  }, [prevError, error, setPassword])
   React.useEffect(() => {
-    setSelectedUser(props.selectedUser)
-  }, [props.selectedUser, setSelectedUser])
+    setSelectedUser(pselectedUser)
+  }, [pselectedUser, setSelectedUser])
+
   React.useEffect(() => {
     if (!prevPassword && !!password) {
-      dispatch(LoginGen.createLoginError({}))
+      loginError()
     }
-  }, [password, prevPassword, dispatch])
+  }, [password, prevPassword, loginError])
   React.useEffect(() => {
-    if (props.error === needPasswordError) {
+    if (error === needPasswordError) {
       setGotNeedPasswordError(true)
     }
-  }, [props.error, setGotNeedPasswordError])
+  }, [error, setGotNeedPasswordError])
 
   return (
     <Login
-      error={props.error}
+      error={error}
       needPassword={!loggedInMap.get(selectedUser) || gotNeedPasswordError}
       onFeedback={props.onFeedback}
       onForgotPassword={() => props.onForgotPassword(selectedUser)}
@@ -97,32 +91,34 @@ const LoginWrapper = (props: Props) => {
   )
 }
 
-export default Container.connect(
-  (state: Container.TypedState) => ({
-    _users: state.config.configuredAccounts,
-    error: state.login.error,
-    selectedUser: state.config.defaultUsername,
-  }),
-  dispatch => ({
-    _onForgotPassword: (username: string) =>
-      dispatch(RecoverPasswordGen.createStartRecoverPassword({username})),
-    onFeedback: () => dispatch(RouteTreeGen.createNavigateAppend({path: ['feedback']})),
-    onLogin: (username: string, password: string) =>
-      dispatch(LoginGen.createLogin({password: new HiddenString(password), username})),
-    onSignup: () => dispatch(SignupGen.createRequestAutoInvite()),
-    onSomeoneElse: () => dispatch(ProvisionGen.createStartProvision()),
-  }),
-  (stateProps, dispatchProps, _: OwnProps) => ({
-    error: (stateProps.error && stateProps.error.desc) || '',
-    loggedInMap: new Map<string, boolean>(
-      stateProps._users.map(account => [account.username, account.hasStoredSecret])
-    ),
-    onFeedback: dispatchProps.onFeedback,
-    onForgotPassword: dispatchProps._onForgotPassword,
-    onLogin: dispatchProps.onLogin,
-    onSignup: dispatchProps.onSignup,
-    onSomeoneElse: dispatchProps.onSomeoneElse,
-    selectedUser: stateProps.selectedUser,
-    users: sortBy(stateProps._users, 'username'),
-  })
-)(LoginWrapper)
+const ReloginContainer = () => {
+  const _users = C.useConfigState(s => s.configuredAccounts)
+  const error = C.useConfigState(s => s.loginError)
+  const selectedUser = C.useConfigState(s => s.defaultUsername)
+  const startRecoverPassword = C.useRecoverState(s => s.dispatch.startRecoverPassword)
+  const onForgotPassword = (username: string) => {
+    startRecoverPassword({username})
+  }
+  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
+  const onFeedback = () => {
+    navigateAppend('signupSendFeedbackLoggedOut')
+  }
+  const onLogin = C.useConfigState(s => s.dispatch.login)
+  const requestAutoInvite = C.useSignupState(s => s.dispatch.requestAutoInvite)
+  const onSignup = () => requestAutoInvite()
+  const onSomeoneElse = C.useProvisionState(s => s.dispatch.startProvision)
+  const props = {
+    error: error?.desc || '',
+    loggedInMap: new Map<string, boolean>(_users.map(account => [account.username, account.hasStoredSecret])),
+    onFeedback,
+    onForgotPassword,
+    onLogin,
+    onSignup,
+    onSomeoneElse,
+    selectedUser,
+    users: sortBy(_users, 'username'),
+  }
+  return <LoginWrapper {...props} />
+}
+
+export default ReloginContainer

@@ -18,9 +18,15 @@ void quarantineFile(const char* inFilename) {
 }
 */
 import "C"
-import "golang.org/x/net/context"
+import (
+	"unsafe"
+
+	"golang.org/x/net/context"
+)
 
 func Quarantine(ctx context.Context, path string) error {
-	C.quarantineFile(C.CString(path))
+	cpath := C.CString(path)
+	defer C.free(unsafe.Pointer(cpath))
+	C.quarantineFile(cpath)
 	return nil
 }

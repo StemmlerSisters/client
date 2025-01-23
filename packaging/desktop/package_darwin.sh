@@ -52,7 +52,7 @@ icon_path="$client_dir/media/icons/Keybase.icns"
 saltpack_icon="$client_dir/media/icons/saltpack.icns"
 
 echo "Loading release tool"
-(cd "$client_dir/go/buildtools"; go install "github.com/keybase/release")
+(cd "$client_dir/go/buildtools"; go install "github.com/keybase/client/go/release")
 release_bin="$GOPATH/bin/release"
 echo "$(go version)"
 
@@ -110,7 +110,7 @@ resources_dir="$out_dir/Keybase.app/Contents/Resources/"
 
 # TODO build and publish an arm64 version
 # The KeybaseInstaller.app installs KBFuse, keybase.Helper, services and CLI via a native app
-installer_url="https://prerelease.keybase.io/darwin-package/KeybaseInstaller-1.1.91-darwin.tgz"
+installer_url="https://prerelease.keybase.io/darwin-package/KeybaseInstaller-1.1.93-darwin.tgz"
 # KeybaseUpdater.app is the native updater UI (prompt dialogs)
 updater_url="https://prerelease.keybase.io/darwin-package/KeybaseUpdater-1.0.7-darwin.tgz"
 
@@ -205,7 +205,7 @@ package_electron() {(
   yarn install --pure-lockfile --ignore-engines
   yarn run package -- --appVersion="$app_version" --comment="$comment" --icon="$icon_path" --saltpackIcon="$saltpack_icon"  --outDir="$build_dir" --arch="$electron_arch"
 
-  # Create symlink for Electron to overcome Gatekeeper bug https://github.com/keybase/go-updater/pull/4
+  # Create symlink for Electron to overcome Gatekeeper bug https://github.com/keybase/client/go/updater/pull/4
   cd "$out_dir/$app_name.app/Contents/MacOS"
   ln -s "Keybase" "Electron"
 
@@ -245,7 +245,7 @@ update_plist() {(
 
 sign() {(
   cd "$out_dir"
-  code_sign_identity="9FC3A5BC09FA2EE307C04060C918486411869B65" # "Developer ID Application: Keybase, Inc. (99229SGT5K)"
+  code_sign_identity="90524F7BEAEACD94C7B473787F4949582F904104" # "Developer ID Application: Keybase, Inc. (99229SGT5K)"
   # need to sign some stuff from electron that doesn't get picked up for some reason
   codesign --verbose --force --deep --timestamp --options runtime --sign "$code_sign_identity" "$app_name.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib"
   codesign --verbose --force --deep --timestamp --options runtime --sign "$code_sign_identity" "$app_name.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libEGL.dylib"
@@ -297,26 +297,9 @@ notarize_dmg() {(
     return
   fi
   echo "Uploading $dmg_name to notarization service in $out_dir"
-  uuid=$(xcrun altool --notarize-app --primary-bundle-id "keybase.notarize" --username "apple-dev@keyba.se" --password "@keychain:notarization" --file "$dmg_name" 2>&1 | grep 'RequestUUID' | awk '{ print $3 }')
-  echo "Successfully uploaded to notarization service, polling for result: $uuid"
-  sleep 15
-  while :
-  do
-    fullstatus=$(xcrun altool --notarization-info "$uuid" --username "apple-dev@keyba.se" --password "@keychain:notarization" 2>&1)
-    status=$(echo "$fullstatus" | grep 'Status\:' | awk '{ print $2 }')
-    if [ "$status" = "success" ]; then
-      echo "Notarization success"
-      xcrun stapler staple "$dmg_name"
-      return
-    elif [ "$status" = "in" ]; then
-      echo "Notarization still in progress, sleeping for 15 seconds and trying again"
-      sleep 15
-    else
-      echo "Notarization failed fullstatus below"
-      echo "$fullstatus"
-      exit 1
-    fi
-  done
+  xcrun notarytool submit "$out_dir/$dmg_name" --keychain-profile "NOTARY_PROFILE_LOGIN" --wait
+  xcrun stapler staple "$out_dir/$dmg_name" 
+  echo "Successfully uploaded to notarization service"
 )}
 
 create_sourcemap_zip() {(

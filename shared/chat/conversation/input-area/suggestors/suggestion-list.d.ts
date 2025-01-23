@@ -1,15 +1,17 @@
-import * as React from 'react'
-import * as Styles from '../../../../styles'
-import * as RPCChatTypes from '../../../../constants/types/rpc-chat-gen'
+import type * as React from 'react'
+import type * as Styles from '@/styles'
+import type * as T from '@/constants/types'
 
-export type Props = {
-  items: Array<any>
-  keyExtractor?: (item: any, idx: number) => string
-  renderItem: (index: number, item: any) => React.ReactElement
+export type Props<I> = {
+  // TODO fix this type
+  items: Array<I>
+  keyExtractor?: (item: I, idx: number) => string
+  renderItem: (index: number, item: I) => React.ReactElement
   selectedIndex: number
   style?: Styles.StylesCrossPlatform
   // likely doesn't belong here
-  suggestBotCommandsUpdateStatus?: RPCChatTypes.UIBotCommandsUpdateStatusTyp
+  suggestBotCommandsUpdateStatus?: T.RPCChat.UIBotCommandsUpdateStatusTyp
 }
 
-export default class extends React.Component<Props> {}
+declare function SuggestionList<I>(p: Props<I>): React.ReactNode
+export default SuggestionList

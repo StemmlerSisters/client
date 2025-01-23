@@ -1,23 +1,19 @@
 import * as React from 'react'
 import {FlatList, View} from 'react-native'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 import {smallHeight, largeHeight} from './list-item2'
-import {createAnimatedComponent} from './reanimated'
+import ReAnimated from './reanimated'
 import type {Props} from './list2'
 import noop from 'lodash/noop'
 
-const AnimatedFlatList = createAnimatedComponent(FlatList)
+const AnimatedFlatList = ReAnimated.FlatList
 
 class List2<T> extends React.PureComponent<Props<T>> {
-  static defaultProps = {
-    keyboardShouldPersistTaps: 'handled',
-  }
-
   _itemRender = ({item, index}: {item: T; index: number}) => {
     return this.props.renderItem(index, item)
   }
 
-  _getItemLayout = (data: Array<T> | null | undefined, index: number) => {
+  _getItemLayout = (data: ArrayLike<T> | null | undefined, index: number) => {
     switch (this.props.itemHeight.type) {
       case 'fixed':
         return {index, length: this.props.itemHeight.height, offset: this.props.itemHeight.height * index}
@@ -37,12 +33,9 @@ class List2<T> extends React.PureComponent<Props<T>> {
       return String(index)
     }
 
-    if (this.props.itemAsKey) {
-      return item
-    }
-
     const keyProp = this.props.keyProperty || 'key'
-    return item[keyProp]
+    const i: {[key: string]: string} = item
+    return i[keyProp] ?? String(index)
   }
 
   render() {
@@ -55,9 +48,11 @@ class List2<T> extends React.PureComponent<Props<T>> {
           bounces={this.props.bounces}
           renderItem={this._itemRender}
           data={this.props.items}
-          getItemLayout={(data, index) => this._getItemLayout(data, index)}
+          getItemLayout={(data: ArrayLike<T> | null | undefined, index: number) =>
+            this._getItemLayout(data, index)
+          }
           keyExtractor={this._keyExtractor}
-          keyboardShouldPersistTaps={this.props.keyboardShouldPersistTaps}
+          keyboardShouldPersistTaps={this.props.keyboardShouldPersistTaps ?? 'handled'}
           onEndReached={this.props.onEndReached}
           windowSize={this.props.windowSize || 10}
           debug={false /* set to true to debug the list */}
@@ -76,7 +71,7 @@ const styles = Styles.styleSheetCreate(
         flexGrow: 1,
         position: 'relative',
       },
-    } as const)
+    }) as const
 )
 
 export default List2

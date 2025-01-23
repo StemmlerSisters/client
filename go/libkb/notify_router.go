@@ -37,6 +37,7 @@ type NotifyListener interface {
 	FavoritesChanged(uid keybase1.UID)
 	FSSubscriptionNotify(arg keybase1.FSSubscriptionNotifyArg)
 	FSSubscriptionNotifyPath(arg keybase1.FSSubscriptionNotifyPathArg)
+	SimpleFSArchiveStatusChanged(status keybase1.SimpleFSArchiveStatus)
 	PaperKeyCached(uid keybase1.UID, encKID keybase1.KID, sigKID keybase1.KID)
 	KeyfamilyChanged(uid keybase1.UID)
 	NewChatActivity(uid keybase1.UID, activity chat1.ChatActivity, source chat1.ChatActivitySource)
@@ -65,6 +66,9 @@ type NotifyListener interface {
 	ChatAttachmentDownloadProgress(uid keybase1.UID, convID chat1.ConversationID, msgID chat1.MessageID,
 		bytesComplete, bytesTotal int64)
 	ChatAttachmentDownloadComplete(uid keybase1.UID, convID chat1.ConversationID, msgID chat1.MessageID)
+	ChatArchiveProgress(jobID chat1.ArchiveJobID,
+		messagesComplete, messagesTotal int64)
+	ChatArchiveComplete(jobID chat1.ArchiveJobID)
 	ChatPaymentInfo(uid keybase1.UID, convID chat1.ConversationID, msgID chat1.MessageID, info chat1.UIPaymentInfo)
 	ChatRequestInfo(uid keybase1.UID, convID chat1.ConversationID, msgID chat1.MessageID, info chat1.UIRequestInfo)
 	ChatPromptUnfurl(uid keybase1.UID, convID chat1.ConversationID, msgID chat1.MessageID, domain string)
@@ -142,6 +146,8 @@ func (n *NoopNotifyListener) FSSubscriptionNotify(arg keybase1.FSSubscriptionNot
 }
 func (n *NoopNotifyListener) FSSubscriptionNotifyPath(arg keybase1.FSSubscriptionNotifyPathArg) {
 }
+func (n *NoopNotifyListener) SimpleFSArchiveStatusChanged(status keybase1.SimpleFSArchiveStatus) {
+}
 func (n *NoopNotifyListener) PaperKeyCached(uid keybase1.UID, encKID keybase1.KID, sigKID keybase1.KID) {
 }
 func (n *NoopNotifyListener) KeyfamilyChanged(uid keybase1.UID) {}
@@ -188,6 +194,10 @@ func (n *NoopNotifyListener) ChatAttachmentDownloadProgress(uid keybase1.UID, co
 }
 func (n *NoopNotifyListener) ChatAttachmentDownloadComplete(uid keybase1.UID, convID chat1.ConversationID,
 	msgID chat1.MessageID) {
+}
+func (n *NoopNotifyListener) ChatArchiveProgress(jobID chat1.ArchiveJobID, messagesComplete, messagesTotal int64) {
+}
+func (n *NoopNotifyListener) ChatArchiveComplete(jobID chat1.ArchiveJobID) {
 }
 func (n *NoopNotifyListener) ChatPaymentInfo(uid keybase1.UID, convID chat1.ConversationID,
 	msgID chat1.MessageID, info chat1.UIPaymentInfo) {
@@ -932,6 +942,27 @@ func (n *NotifyRouter) HandleFSSubscriptionNotifyPath(arg keybase1.FSSubscriptio
 	})
 }
 
+func (n *NotifyRouter) HandleSimpleFSArchiveStatusChanged(ctx context.Context, status keybase1.SimpleFSArchiveStatus) {
+	if n == nil {
+		return
+	}
+	// For all connections we currently have open...
+	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
+		// If the connection wants the `Kbfs` notification type
+		if n.getNotificationChannels(id).Notifysimplefs { // In the background do...
+			go func() {
+				_ = (keybase1.NotifySimpleFSClient{
+					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
+				}).SimpleFSArchiveStatusChanged(context.Background(), status)
+			}()
+		}
+		return true
+	})
+	n.runListeners(func(listener NotifyListener) {
+		listener.SimpleFSArchiveStatusChanged(status)
+	})
+}
+
 // HandleDeviceCloneNotification is called when a run of the device clone status update
 // finds a newly-added, possible clone. It will broadcast the messages to all curious listeners.
 func (n *NotifyRouter) HandleDeviceCloneNotification(newClones int) {
@@ -1497,6 +1528,64 @@ func (n *NotifyRouter) HandleChatAttachmentDownloadComplete(ctx context.Context,
 		listener.ChatAttachmentDownloadComplete(uid, convID, msgID)
 	})
 	n.G().Log.CDebugf(ctx, "- Sent ChatAttachmentDownloadComplete notification")
+}
+
+func (n *NotifyRouter) HandleChatArchiveProgress(ctx context.Context, jobID chat1.ArchiveJobID, messagesComplete, messagesTotal int64) {
+	if n == nil {
+		return
+	}
+	var wg sync.WaitGroup
+	n.G().Log.CDebugf(ctx, "+ Sending ChatArchiveProgress notification")
+	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
+		if n.getNotificationChannels(id).Chatarchive {
+			wg.Add(1)
+			go func() {
+				_ = (chat1.NotifyChatClient{
+					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
+				}).ChatArchiveProgress(context.Background(), chat1.ChatArchiveProgressArg{
+					JobID:            jobID,
+					MessagesComplete: messagesComplete,
+					MessagesTotal:    messagesTotal,
+				})
+				wg.Done()
+			}()
+		}
+		return true
+	})
+	wg.Wait()
+
+	n.runListeners(func(listener NotifyListener) {
+		listener.ChatArchiveProgress(jobID, messagesComplete, messagesTotal)
+	})
+	n.G().Log.CDebugf(ctx, "- Sent ChatArchiveProgress notification")
+}
+
+func (n *NotifyRouter) HandleChatArchiveComplete(ctx context.Context, jobID chat1.ArchiveJobID) {
+	if n == nil {
+		return
+	}
+	var wg sync.WaitGroup
+	n.G().Log.CDebugf(ctx, "+ Sending ChatArchiveComplete notification")
+	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
+		if n.getNotificationChannels(id).Chatarchive {
+			wg.Add(1)
+			go func() {
+				_ = (chat1.NotifyChatClient{
+					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
+				}).ChatArchiveComplete(context.Background(),
+					jobID,
+				)
+				wg.Done()
+			}()
+		}
+		return true
+	})
+	wg.Wait()
+
+	n.runListeners(func(listener NotifyListener) {
+		listener.ChatArchiveComplete(jobID)
+	})
+	n.G().Log.CDebugf(ctx, "- Sent ChatArchiveComplete notification")
 }
 
 func (n *NotifyRouter) HandleChatSetConvRetention(ctx context.Context, uid keybase1.UID,

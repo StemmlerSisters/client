@@ -1,2 +1,4 @@
-• Various bug fixes and performance enhancements
-• Mark threads as unread
+macOS:
+
+• Fix the KBFS mount to work on Sequoia.
+• Prevent unnecessary permission dialogs on Sequoia.

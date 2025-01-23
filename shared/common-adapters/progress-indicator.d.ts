@@ -1,10 +1,11 @@
-import {Component} from 'react'
+import type * as React from 'react'
+import type * as Styles from '@/styles'
 
 export type Props = {
-  style?: any
+  style?: Styles.StylesCrossPlatform
   white?: boolean
   type?: 'Small' | 'Large' | 'Huge' // Huge is desktop-only
 }
 
-declare class ProgressIndicator extends Component<Props> {}
+declare const ProgressIndicator: (p: Props) => React.ReactNode
 export default ProgressIndicator

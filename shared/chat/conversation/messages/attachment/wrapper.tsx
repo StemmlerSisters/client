@@ -8,7 +8,7 @@ import {WrapperMessage, useCommon, type Props} from '../wrapper/wrapper'
 export const WrapperAttachmentAudio = React.memo(function WrapperAttachmentAudio(p: Props) {
   const {ordinal} = p
   const common = useCommon(ordinal)
-  const AudioAttachment = require('./audio').default as typeof AudioAttachmentType
+  const {default: AudioAttachment} = require('./audio') as {default: typeof AudioAttachmentType}
   return (
     <WrapperMessage {...p} {...common}>
       <AudioAttachment />
@@ -18,37 +18,37 @@ export const WrapperAttachmentAudio = React.memo(function WrapperAttachmentAudio
 export const WrapperAttachmentFile = React.memo(function WrapperAttachmentFile(p: Props) {
   const {ordinal} = p
   const common = useCommon(ordinal)
-  const {toggleShowingPopup} = common
+  const {showPopup} = common
 
-  const FileAttachment = require('./file/container').default as typeof FileAttachmentType
+  const {default: FileAttachment} = require('./file/container') as {default: typeof FileAttachmentType}
 
   return (
     <WrapperMessage {...p} {...common}>
-      <FileAttachment toggleMessageMenu={toggleShowingPopup} />
+      <FileAttachment showPopup={showPopup} />
     </WrapperMessage>
   )
 })
 export const WrapperAttachmentVideo = React.memo(function WrapperAttachmentVideo(p: Props) {
   const {ordinal} = p
   const common = useCommon(ordinal)
-  const {toggleShowingPopup} = common
-  const VideoAttachment = require('./video').default as typeof VideoAttachmentType
+  const {showPopup} = common
+  const {default: VideoAttachment} = require('./video') as {default: typeof VideoAttachmentType}
 
   return (
     <WrapperMessage {...p} {...common}>
-      <VideoAttachment toggleMessageMenu={toggleShowingPopup} />
+      <VideoAttachment showPopup={showPopup} />
     </WrapperMessage>
   )
 })
 export const WrapperAttachmentImage = React.memo(function WrapperAttachmentImage(p: Props) {
   const {ordinal} = p
   const common = useCommon(ordinal)
-  const {toggleShowingPopup} = common
-  const ImageAttachment = require('./image2').default as typeof ImageAttachmentType
+  const {showPopup} = common
+  const {default: ImageAttachment} = require('./image2') as {default: typeof ImageAttachmentType}
 
   return (
     <WrapperMessage {...p} {...common}>
-      <ImageAttachment toggleMessageMenu={toggleShowingPopup} />
+      <ImageAttachment showPopup={showPopup} />
     </WrapperMessage>
   )
 })

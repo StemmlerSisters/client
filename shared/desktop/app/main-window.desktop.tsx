@@ -1,34 +1,35 @@
 import URL from 'url-parse'
 import * as Electron from 'electron'
-import * as ConfigGen from '../../actions/config-gen'
+import * as RemoteGen from '@/actions/remote-gen'
+import * as R from '@/constants/remote'
 import * as fs from 'fs'
 import menuHelper from './menu-helper.desktop'
-import type {WindowState} from '../../constants/types/config'
-import {showDevTools} from '../../local-debug'
-import {guiConfigFilename, isDarwin, isWindows, defaultUseNativeFrame} from '../../constants/platform.desktop'
-import logger from '../../logger'
+import {showDevTools} from '@/local-debug'
+import {guiConfigFilename, isDarwin, isWindows, defaultUseNativeFrame} from '@/constants/platform.desktop'
+import logger from '@/logger'
 import debounce from 'lodash/debounce'
 import {setupDevToolsExtensions} from './dev-tools.desktop'
 import {assetRoot, htmlPrefix} from './html-root.desktop'
-import KB2 from '../../util/electron.desktop'
+import KB2 from '@/util/electron.desktop'
 
 const {env} = KB2.constants
-const {mainWindowDispatch} = KB2.functions
 
 let htmlFile = `${htmlPrefix}${assetRoot}main${__FILE_SUFFIX__}.html`
 
 const setupDefaultSession = () => {
   const ds = Electron.session.defaultSession
-  if (!ds) {
-    throw new Error('No default Session? Should be impossible')
-  }
 
   // We are not using partitions on webviews, so this essentially disables
   // download for webviews. If we decide to start using partitions for
   // webviews, we should make sure to attach this to those partitions too.
   ds.on('will-download', event => event.preventDefault())
-  // Disallow any permissions requests except for notifications
+
+  // Disallow any permissions requests except for notifications and fullscreen
   ds.setPermissionRequestHandler((webContents, permission, callback) => {
+    // allow fullscreen
+    if (permission === 'fullscreen') {
+      return callback(true)
+    }
     const ourURL = new URL(htmlFile)
     const requestURL = new URL(webContents.getURL())
     if (
@@ -42,7 +43,7 @@ const setupDefaultSession = () => {
   })
 }
 
-const defaultWindowState: WindowState = {
+const defaultWindowState = {
   dockHidden: false,
   height: 600,
   isFullScreen: false,
@@ -63,7 +64,7 @@ const setupWindowEvents = (win: Electron.BrowserWindow) => {
     windowState.height = winBounds.height
     windowState.isFullScreen = win.isFullScreen()
     windowState.windowHidden = !win.isVisible()
-    mainWindowDispatch(ConfigGen.createUpdateWindowState({windowState}))
+    R.remoteDispatch(RemoteGen.createUpdateWindowState({windowState}))
   }, 5000)
 
   win.on('show', saveWindowState)
@@ -81,7 +82,7 @@ const setupWindowEvents = (win: Electron.BrowserWindow) => {
 
   if (!isDarwin) {
     const emitMaxChange = () => {
-      mainWindowDispatch(ConfigGen.createUpdateWindowMaxState({max: win.isMaximized()}))
+      R.remoteDispatch(RemoteGen.createUpdateWindowMaxState({max: win.isMaximized()}))
     }
 
     win.on('maximize', emitMaxChange)
@@ -90,9 +91,9 @@ const setupWindowEvents = (win: Electron.BrowserWindow) => {
 }
 
 const changeDock = (show: boolean) => {
-  const dock = Electron.app.dock
+  const _dock = Electron.app.dock
+  const dock = _dock as typeof _dock | undefined
   if (!dock) return
-
   if (show) {
     dock
       .show()
@@ -103,7 +104,7 @@ const changeDock = (show: boolean) => {
   }
 
   windowState.dockHidden = !show
-  mainWindowDispatch(ConfigGen.createUpdateWindowState({windowState}))
+  R.remoteDispatch(RemoteGen.createUpdateWindowState({windowState}))
 }
 
 export const showDockIcon = () => changeDock(true)
@@ -111,8 +112,9 @@ export const hideDockIcon = () => changeDock(false)
 
 let useNativeFrame = defaultUseNativeFrame
 let isDarkMode = false
-let darkModePreference = undefined
+let darkModePreference: undefined | 'system' | 'alwaysDark' | 'alwaysLight'
 let disableSpellCheck = false
+let disableScreenshot = false
 
 /**
  * loads data that we normally save from configGuiSetValue. At this point the service might not exist so we must read it directly
@@ -121,45 +123,77 @@ let disableSpellCheck = false
 const loadWindowState = () => {
   let openAtLogin = true
   try {
-    const s = fs.readFileSync(guiConfigFilename, {encoding: 'utf8'})
-    const guiConfig = JSON.parse(s)
+    let s: string = ''
+    try {
+      s = fs.readFileSync(guiConfigFilename, {encoding: 'utf8'})
+    } catch {}
+    const guiConfig = JSON.parse(s) as
+      | Partial<{
+          openAtLogin: unknown
+          useNativeFrame: unknown
+          ui: Partial<{
+            disableSpellCheck: unknown
+            disableScreenshot: unknown
+            darkMode: unknown
+          }>
+          windowState: unknown
+        }>
+      | undefined
 
-    if (guiConfig.openAtLogin !== undefined) {
-      openAtLogin = guiConfig.openAtLogin
-    }
+    openAtLogin = typeof guiConfig?.openAtLogin === 'boolean' ? guiConfig.openAtLogin : openAtLogin
+    useNativeFrame =
+      typeof guiConfig?.useNativeFrame === 'boolean' ? guiConfig.useNativeFrame : useNativeFrame
 
-    if (guiConfig.useNativeFrame !== undefined) {
-      useNativeFrame = guiConfig.useNativeFrame
-    }
+    if (guiConfig?.ui) {
+      const {
+        darkMode,
+        disableSpellCheck: _disableSpellCheck,
+        disableScreenshot: _disableScreenshot,
+      } = guiConfig.ui
+      disableSpellCheck = typeof _disableSpellCheck === 'boolean' ? _disableSpellCheck : disableSpellCheck
+      disableScreenshot = typeof _disableScreenshot === 'boolean' ? _disableScreenshot : disableScreenshot
 
-    if (guiConfig.ui) {
-      disableSpellCheck = guiConfig.ui.disableSpellCheck
-
-      const {darkMode} = guiConfig.ui
-      switch (darkMode) {
-        case 'system':
-          darkModePreference = darkMode
-          isDarkMode = KB2.constants.startDarkMode
-          break
-        case 'alwaysDark':
-          darkModePreference = darkMode
-          isDarkMode = true
-          break
-        case 'alwaysLight':
-          darkModePreference = darkMode
-          isDarkMode = false
-          break
+      if (typeof darkMode === 'string') {
+        switch (darkMode) {
+          case 'system':
+            darkModePreference = darkMode
+            isDarkMode = KB2.constants.startDarkMode
+            break
+          case 'alwaysDark':
+            darkModePreference = darkMode
+            isDarkMode = true
+            break
+          case 'alwaysLight':
+            darkModePreference = darkMode
+            isDarkMode = false
+            break
+        }
       }
+    } else {
+      darkModePreference = 'system'
+      isDarkMode = KB2.constants.startDarkMode
     }
 
-    const obj = JSON.parse(guiConfig.windowState)
-    windowState.dockHidden = obj.dockHidden || windowState.dockHidden
-    windowState.height = obj.height || windowState.height
-    windowState.isFullScreen = obj.isFullScreen || windowState.isFullScreen
-    windowState.width = obj.width || windowState.width
-    windowState.windowHidden = obj.windowHidden || windowState.windowHidden
-    windowState.x = obj.x === undefined ? windowState.x : obj.x
-    windowState.y = obj.y === undefined ? windowState.y : obj.y
+    const obj = JSON.parse(typeof guiConfig?.windowState === 'string' ? guiConfig.windowState : '') as
+      | undefined
+      | Partial<{
+          dockHidden: unknown
+          height: unknown
+          isFullScreen: unknown
+          width: unknown
+          windowHidden: unknown
+          x: unknown
+          y: unknown
+        }>
+    windowState.dockHidden = typeof obj?.dockHidden === 'boolean' ? obj.dockHidden : windowState.dockHidden
+    windowState.height = typeof obj?.height === 'number' ? obj.height : windowState.height
+    windowState.isFullScreen =
+      typeof obj?.isFullScreen === 'boolean' ? obj.isFullScreen : windowState.isFullScreen
+    windowState.width = typeof obj?.width === 'number' ? obj.width : windowState.width
+    windowState.windowHidden =
+      typeof obj?.windowHidden === 'boolean' ? obj.windowHidden : windowState.windowHidden
+    windowState.x = typeof obj?.x === 'number' ? obj.x : windowState.x
+    windowState.y = typeof obj?.y === 'number' ? obj.y : windowState.y
 
     // sanity check it fits in the screen
     const displayBounds = Electron.screen.getDisplayMatching({
@@ -180,7 +214,7 @@ const loadWindowState = () => {
       windowState.x = defaultWindowState.x
       windowState.y = defaultWindowState.y
     }
-  } catch (e) {
+  } catch {
     logger.info(`Couldn't load`, guiConfigFilename, ' continuing...')
   }
 
@@ -300,6 +334,9 @@ const MainWindow = () => {
     y: windowState.y,
     ...(isDarwin ? {titleBarStyle: 'hiddenInset'} : {}),
   })
+
+  win.setContentProtection(disableScreenshot)
+
   if (__DEV__ || __PROFILE__) {
     setupDevToolsExtensions()
   }
@@ -320,8 +357,8 @@ const MainWindow = () => {
 
   menuHelper(win)
 
-  if (showDevTools && win.webContents) {
-    win.webContents.openDevTools({mode: 'detach'})
+  if (showDevTools) {
+    win.webContents.openDevTools({mode: 'detach', title: `${__DEV__ ? 'DEV' : 'Prod'} Keybase Devtools`})
   }
 
   registerForAppLinks()
@@ -332,8 +369,8 @@ const MainWindow = () => {
   return win
 }
 
-export const getMainWindow = (): Electron.BrowserWindow | null => {
+export const getMainWindow = (): Electron.BrowserWindow | undefined => {
   const w = Electron.BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('/main.'))
-  return w || null
+  return w
 }
 export default MainWindow

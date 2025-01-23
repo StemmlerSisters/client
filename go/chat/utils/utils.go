@@ -2542,9 +2542,8 @@ func EphemeralLifetimeFromConv(ctx context.Context, g *globals.Context, conv cha
 		return retentionRes, nil
 	} else if gregorRes != nil {
 		return gregorRes, nil
-	} else {
-		return nil, nil
 	}
+	return nil, nil
 }
 
 var decorateBegin = "$>kb$"
@@ -3079,4 +3078,34 @@ func IsDeletedConvError(err error) bool {
 	default:
 		return false
 	}
+}
+
+const DisablePlaintextDesktopGregorKey = "disableplaintextdesktop"
+const ConvertHEICGregorKey = "convertheic"
+
+func SetGregorBool(ctx context.Context, g *globals.Context, key string, disabled bool) error {
+	_, err := g.GregorState.UpdateCategory(ctx, key,
+		[]byte(strconv.FormatBool(disabled)), gregor1.TimeOrOffset{})
+	return err
+}
+
+func GetGregorBool(ctx context.Context, g *globals.Context, key string, defaultVal bool) (bool, error) {
+	st, err := g.GregorState.State(ctx)
+	if err != nil {
+		return false, err
+	}
+	cat, err := gregor1.ObjFactory{}.MakeCategory(key)
+	if err != nil {
+		return false, err
+	}
+	items, err := st.ItemsWithCategoryPrefix(cat)
+	if err != nil {
+		return false, err
+	}
+	if len(items) > 0 {
+		it := items[0]
+		body := string(it.Body().Bytes())
+		return strconv.ParseBool(body)
+	}
+	return defaultVal, nil
 }

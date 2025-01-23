@@ -1,8 +1,9 @@
 import * as React from 'react'
-import * as Kb from '../../../common-adapters'
+import * as Kb from '@/common-adapters'
 import {useMessagePopup} from '../messages/message-popup'
-import * as Styles from '../../../styles'
+import * as Styles from '@/styles'
 import type {Props} from '.'
+import {useData, usePreviewFallback} from './hooks'
 
 type ArrowProps = {
   left: boolean
@@ -14,7 +15,7 @@ const Arrow = (props: ArrowProps) => {
   return (
     <Kb.Box
       className="hover_background_color_black background_color_black_50 fade-background-color"
-      onClick={(e: React.MouseEvent) => {
+      onClick={e => {
         e.stopPropagation()
         onClick()
       }}
@@ -30,15 +31,31 @@ const Arrow = (props: ArrowProps) => {
 }
 
 const Fullscreen = React.memo(function Fullscreen(p: Props) {
-  const {path, title, message, progress, progressLabel} = p
-  const {onNextAttachment, onPreviousAttachment, onClose, onDownloadAttachment, onShowInFinder, isVideo} = p
+  const data = useData(p.ordinal)
+  const {message, ordinal, path, title, progress, previewPath} = data
+  const {progressLabel, onNextAttachment, onPreviousAttachment, onClose} = data
+  const {onDownloadAttachment, onShowInFinder, isVideo} = data
+  const {fullWidth, fullHeight} = data
 
   const [isZoomed, setIsZoomed] = React.useState(false)
-  const onZoomed = React.useCallback((zoomed: boolean) => {
+  const onIsZoomed = React.useCallback((zoomed: boolean) => {
     setIsZoomed(zoomed)
   }, [])
 
-  const vidRef = React.useRef(null)
+  const preload = React.useCallback((path: string, onLoad: () => void, onError: () => void) => {
+    const img = new Image()
+    img.src = path
+    img.onload = onLoad
+    img.onerror = onError
+  }, [])
+
+  const imgSrc = usePreviewFallback(path, previewPath, isVideo, data.showPreview, preload)
+
+  const forceDims = React.useMemo(() => {
+    return fullHeight && fullWidth ? {height: fullHeight, width: fullWidth} : undefined
+  }, [fullHeight, fullWidth])
+
+  const vidRef = React.useRef<HTMLVideoElement>(null)
   const hotKeys = ['left', 'right']
   const onHotKey = (cmd: string) => {
     cmd === 'left' && onPreviousAttachment()
@@ -46,28 +63,34 @@ const Fullscreen = React.memo(function Fullscreen(p: Props) {
   }
   const isDownloadError = !!message.transferErrMsg
 
-  const {toggleShowingPopup, popup, popupAnchor} = useMessagePopup({
-    conversationIDKey: message.conversationIDKey,
-    ordinal: message.id,
-  })
+  const {showPopup, popup, popupAnchor} = useMessagePopup({ordinal})
+
+  const titleOverride = React.useMemo(
+    () => ({
+      paragraph: Styles.platformStyles({
+        isElectron: {whiteSpace: 'nowrap'},
+      }),
+    }),
+    []
+  )
 
   return (
     <Kb.PopupDialog onClose={onClose} fill={true}>
       <Kb.Box style={styles.container}>
         <Kb.HotKey hotKeys={hotKeys} onHotKey={onHotKey} />
         <Kb.Box style={styles.headerFooter}>
-          <Kb.Markdown lineClamp={2} style={Styles.globalStyles.flexOne}>
+          <Kb.Markdown lineClamp={2} style={Styles.globalStyles.flexOne} styleOverride={titleOverride as any}>
             {title}
           </Kb.Markdown>
           <Kb.Icon
-            ref={popupAnchor as any}
+            ref={popupAnchor}
             type="iconfont-ellipsis"
             style={Styles.platformStyles({
               common: {marginLeft: Styles.globalMargins.tiny},
               isElectron: {cursor: 'pointer'},
             })}
             color={Styles.globalColors.black_50}
-            onClick={toggleShowingPopup}
+            onClick={showPopup}
           />
           {popup}
         </Kb.Box>
@@ -85,16 +108,15 @@ const Fullscreen = React.memo(function Fullscreen(p: Props) {
                 {isVideo ? (
                   <video
                     autoPlay={true}
-                    style={styles.videoFit as any}
+                    style={Kb.Styles.castStyleDesktop(styles.videoFit)}
                     controlsList="nodownload nofullscreen noremoteplayback"
                     controls={true}
                     ref={vidRef}
                   >
                     <source src={path} />
-                    <style>{showPlayButton}</style>
                   </video>
                 ) : (
-                  <Kb.ZoomableImage src={path} onZoomed={onZoomed} />
+                  <Kb.ZoomableImage src={imgSrc} onIsZoomed={onIsZoomed} forceDims={forceDims} />
                 )}
               </Kb.Box2>
               {!isZoomed && <Arrow left={false} onClick={onNextAttachment} />}
@@ -224,13 +246,7 @@ const styles = Styles.styleSheetCreate(
           width: '100%',
         },
       }),
-    } as const)
+    }) as const
 )
-
-const showPlayButton = `
-video::-webkit-media-controls-play-button {
-  display: block;
-}
-`
 
 export default Fullscreen

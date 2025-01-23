@@ -1,7 +1,9 @@
 import type {CSSProperties} from 'react'
 import type {ViewStyle, TextStyle, ImageStyle} from 'react-native'
 
-export type Color = null | string
+export type DimensionValue = number | 'auto' | `${number}%`
+
+export type Color = undefined | string
 type _StylesDesktopOverride = {
   backgroundImage?: string
   objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down'
@@ -18,6 +20,7 @@ type StyleKeys =
   | 'alignItems'
   | 'alignSelf'
   | 'backgroundColor'
+  | 'backgroundPosition'
   | 'backgroundRepeat'
   | 'backgroundSize'
   | 'border'
@@ -44,6 +47,7 @@ type StyleKeys =
   | 'bottom'
   | 'boxShadow'
   | 'color'
+  | 'columnGap'
   | 'contain'
   | 'cursor'
   | 'direction'
@@ -88,6 +92,7 @@ type StyleKeys =
   | 'position'
   | 'resize'
   | 'right'
+  | 'rowGap'
   | 'textAlign'
   | 'textDecoration'
   | 'textDecorationColor'
@@ -135,8 +140,8 @@ export type _StylesCrossPlatform = {
   [k in keyof _StylesDesktop]: k extends keyof _StylesCrossPlatformOverride // use override
     ? _StylesCrossPlatformOverride[k] // or if its shared between desktop and mobile choose one which extends the other
     : k extends keyof _StylesMobile
-    ? _StylesMobile[k] & _StylesDesktop[k]
-    : never
+      ? _StylesMobile[k] & _StylesDesktop[k]
+      : never
 }
 
 type _StylesCrossPlatformFalsy = _StylesCrossPlatform | undefined | null | false

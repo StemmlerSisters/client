@@ -4,13 +4,14 @@ const util = require('util')
 const fs = require('fs')
 const path = require('path')
 const camelcase = require('camelcase')
+const colors = require('colors')
 const json5 = require('json5')
 const enabledCalls = json5.parse(fs.readFileSync(path.join(__dirname, 'enabled-calls.json')))
 
 // Sanity check this json file
 Object.keys(enabledCalls).forEach(rpc =>
   Object.keys(enabledCalls[rpc]).forEach(type => {
-    if (!['promise', 'incoming', 'engineListener'].includes(type)) {
+    if (!['promise', 'incoming', 'engineListener', 'custom'].includes(type)) {
       console.log(colors.red('ERROR! Invalid enabled call?\n\n '), rpc, type)
       process.exit(1)
     }
@@ -111,6 +112,8 @@ function analyzeEnums(json, project) {
     }, {})
 }
 
+const typeOverloads = {}
+
 function analyzeTypes(json, project) {
   return json.types.reduce((map, t) => {
     if (project.seenTypes[t.name]) {
@@ -118,6 +121,11 @@ function analyzeTypes(json, project) {
     }
 
     project.seenTypes[t.name] = true
+
+    if (typeOverloads[t.name]) {
+      map[t.name] = typeOverloads[t.name]
+      return map
+    }
 
     switch (t.type) {
       case 'record':
@@ -160,9 +168,9 @@ function figureType(type, prefix = '') {
   } else if (typeof type === 'object') {
     switch (type.type) {
       case 'array':
-        return `Array<${prefix}${capitalize(type.items)}> | null`
+        return `ReadonlyArray<${prefix}${capitalize(type.items)}> | null`
       case 'map':
-        return `{[key: string]: ${figureType(type.values)}}`
+        return `{[key: string]: ${figureType(type.values)}} | null`
       default:
         console.log(`Unknown type: ${type}`)
         return 'unknown'
@@ -197,25 +205,23 @@ function analyzeMessages(json, project) {
         }: ${rtype}`
       })
     const noParams = !arr.length
-    const inParam = noParams ? 'void' : `{${arr.join(',')}}`
+    const inParam = noParams ? 'undefined' : `{${arr.join(',')}}`
     const name = `${json.protocol}${capitalize(m)}`
     const outParam = figureType(message.response)
     const methodName = `'${json.namespace}.${json.protocol}.${m}'`
     const isUIMethod = isUIProtocol || enabledCall(methodName, 'incoming')
 
     if (isUIMethod) {
-      project.incomingMaps[
-        methodName
-      ] = `(params: MessageTypes[${methodName}]['inParam'] & {sessionID: number}) => IncomingReturn`
+      project.incomingMaps[methodName] = `(params: MessageTypes[${methodName}]['inParam']) => void`
       if (!message.hasOwnProperty('notify')) {
         project.customResponseIncomingMaps[
           methodName
-        ] = `(params: MessageTypes[${methodName}]['inParam'] & {sessionID: number}, response: {error: IncomingErrorCallback, result: (res: MessageTypes[${methodName}]['outParam']) => void}) => IncomingReturn`
+        ] = `(params: MessageTypes[${methodName}]['inParam'], response: {error: IncomingErrorCallback, result: (res: MessageTypes[${methodName}]['outParam']) => void}) => void`
       }
     }
 
-    const rpcPromise = isUIMethod ? '' : rpcPromiseGen(methodName, name, false)
-    const rpcPromiseType = isUIMethod ? '' : rpcPromiseGen(methodName, name, true)
+    const rpcPromise = isUIMethod ? '' : rpcPromiseGen(methodName, name, false, json, project)
+    const rpcPromiseType = isUIMethod ? '' : rpcPromiseGen(methodName, name, true, json, project)
     const engineListener = isUIMethod ? '' : engineListenerGen(methodName, name, false)
     const engineListenerType = isUIMethod ? '' : engineListenerGen(methodName, name, true)
 
@@ -257,16 +263,30 @@ function engineListenerGen(methodName, name, justType) {
   }
   return justType
     ? `declare export function ${name}RpcListener (p: {params: MessageTypes[${methodName}]['inParam'], incomingCallMap: IncomingCallMapType, customResponseIncomingCallMap?: CustomResponseIncomingCallMap, waitingKey?: WaitingKey}): CallEffect<void, () => void, Array<void>>`
-    : `export const ${name}RpcListener = (p: {params: MessageTypes[${methodName}]['inParam'], incomingCallMap: IncomingCallMapType, customResponseIncomingCallMap?: CustomResponseIncomingCallMap, waitingKey?: WaitingKey}, listenerApi: ListenerApi) => getEngineListener()({method: ${methodName}, params: p.params, incomingCallMap: p.incomingCallMap, customResponseIncomingCallMap: p.customResponseIncomingCallMap, waitingKey: p.waitingKey}, listenerApi)`
+    : `export const ${name}RpcListener = (p: {params: MessageTypes[${methodName}]['inParam'], incomingCallMap: IncomingCallMapType, customResponseIncomingCallMap?: CustomResponseIncomingCallMap, waitingKey?: WaitingKey}) => getEngineListener<typeof p, Promise<MessageTypes[${methodName}]['outParam']>>()({method: ${methodName}, params: p.params, incomingCallMap: p.incomingCallMap, customResponseIncomingCallMap: p.customResponseIncomingCallMap, waitingKey: p.waitingKey})`
 }
 
-function rpcPromiseGen(methodName, name, justType) {
+function rpcPromiseGen(methodName, name, justType, json, project) {
   if (!enabledCall(methodName, 'promise')) {
     return ''
   }
+
+  // if we have no params, make it optional
+  const lookupName = methodName.split('.').at(-1).replaceAll("'", '')
+  const r = json.messages[lookupName].request
+  const hasParams =
+    r !== null &&
+    (Array.isArray(r) &&
+      r.reduce((cnt, i) => {
+        if (i && i.name !== 'sessionID') {
+          cnt++
+        }
+        return cnt
+      }, 0)) > 0
+  const inParams = hasParams ? `params: MessageTypes[${methodName}]['inParam']` : 'params?: undefined'
   return justType
-    ? `declare export function ${name}RpcPromise (params: MessageTypes[${methodName}]['inParam'], waitingKey?: WaitingKey): Promise<MessageTypes[${methodName}]['outParam']>`
-    : `export const ${name}RpcPromise = (params: MessageTypes[${methodName}]['inParam'], waitingKey?: WaitingKey) => new Promise<MessageTypes[${methodName}]['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: ${methodName}, params, callback: (error: SimpleError, result: MessageTypes[${methodName}]['outParam']) => error ? reject(error) : resolve(result), waitingKey}))`
+    ? `declare export function ${name}RpcPromise (${inParams}, waitingKey?: WaitingKey): Promise<MessageTypes[${methodName}]['outParam']>`
+    : `export const ${name}RpcPromise = (${inParams}, waitingKey?: WaitingKey) => new Promise<MessageTypes[${methodName}]['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: ${methodName}, params, callback: (error: SimpleError, result: MessageTypes[${methodName}]['outParam']) => error ? reject(error) : resolve(result), waitingKey}))`
 }
 
 function maybeIfNot(s) {
@@ -355,7 +375,7 @@ function parseVariant(t, project) {
         } else if (typeof c.body === 'string') {
           bodyType = capitalize(c.body)
         } else if (c.body.type === 'array') {
-          bodyType = `Array<${capitalize(c.body.items)}>`
+          bodyType = `ReadonlyArray<${capitalize(c.body.items)}>`
         }
         const bodyStr = c.body ? `, ${label}: ${bodyType}` : ''
         return `{ ${t.switch.name}: ${type}.${label}${bodyStr} }`
@@ -370,10 +390,7 @@ function parseVariant(t, project) {
 }
 
 function writeActions() {
-  const staticActions = {
-    disconnected: {},
-    connected: {},
-  }
+  const staticActions = {}
 
   const seenProjects = {}
 
@@ -381,7 +398,7 @@ function writeActions() {
     actions: Object.keys(projects).reduce((map, p) => {
       const callMap = projects[p].incomingMaps
       callMap &&
-        Object.keys(callMap).reduce((map, method) => {
+        Object.keys(callMap).reduce((m, method) => {
           const name = method
             .replace(/'/g, '')
             .split('.')
@@ -394,10 +411,10 @@ function writeActions() {
             response = `, response: {error: ${p}Types.IncomingErrorCallback, result: (param: ${p}Types.MessageTypes[${method}]['outParam']) => void}`
           }
 
-          map[name] = {
-            params: `${p}Types.MessageTypes[${method}]['inParam'] & {sessionID: number}${response}`,
+          m[name] = {
+            params: `${p}Types.MessageTypes[${method}]['inParam'] ${response}`,
           }
-          return map
+          return m
         }, map)
       return map
     }, staticActions),
@@ -406,7 +423,7 @@ function writeActions() {
   const toWrite = JSON.stringify(
     {
       prelude: Object.keys(seenProjects).map(
-        p => `import type * as ${p}Types from '../constants/types/${projects[p].out}'`
+        p => `import type * as ${p}Types from '@/constants/types/${projects[p].out}'`
       ),
       ...data,
     },
@@ -453,11 +470,11 @@ function writeFlow(typeDefs, project) {
 
   const engineImports = [
     project.hasEngine ? 'getEngine as engine' : '',
-    project.hasEngineListener ? 'getEngineListener, type ListenerApi' : '',
+    project.hasEngineListener ? 'getEngineListener' : '',
   ]
     .filter(f => f.length)
     .join(', ')
-  const engineImport = engineImports.length ? `import {${engineImports}} from '../../engine/require'` : ''
+  const engineImport = engineImports.length ? `import {${engineImports}} from '@/engine/require'` : ''
   const typePrelude = `/* eslint-disable */
 
 // This file is auto-generated by client/protocol/Makefile.
@@ -466,7 +483,7 @@ ${project.import.map(n => importMap[n] || '').join('\n')}
 ${project.import.map(n => `export {${n}}`).join('\n')}
 export type Bool = boolean
 export type Boolean = boolean
-export type Bytes = Buffer
+export type Bytes = Uint8Array
 export type Double = number
 export type Int = number
 export type Int64 = number
@@ -474,26 +491,19 @@ export type Long = number
 export type String = string
 export type Uint = number
 export type Uint64 = number
-${project.hasEngine ? 'type WaitingKey = string | Array<string>' : ''}
+${project.hasEngine ? 'type WaitingKey = string | ReadonlyArray<string>' : ''}
 type SimpleError = {code?: number, desc?: string}
 export type IncomingErrorCallback = (err?: SimpleError | null) => void
-${
-  project.hasEngine
-    ? `
-import type {TypedActions} from '../../actions/typed-actions-gen'
-type IncomingReturn = Promise<Array<TypedActions> | TypedActions | false | undefined | void> | Array<TypedActions> | TypedActions | false | undefined | void
-`
-    : ''
-}
 
 `
   const consts = Object.keys(typeDefs.consts).map(k => typeDefs.consts[k])
   const types = Object.keys(typeDefs.types).map(k => typeDefs.types[k])
   const messagePromise = Object.keys(typeDefs.messages).map(k => typeDefs.messages[k].rpcPromise)
   const messageEngineListener = Object.keys(typeDefs.messages).map(k => typeDefs.messages[k].engineListener)
-  const callMapType = Object.keys(project.incomingMaps).length ? 'IncomingCallMapType' : 'void'
+  // const callMapType = Object.keys(project.incomingMaps).length ? 'IncomingCallMapType' : 'void'
   const incomingMap = `\nexport type IncomingCallMapType = {
     ${Object.keys(project.incomingMaps)
+      .filter(im => enabledCall(im, 'incoming'))
       .map(im => `  ${im}?: ${project.incomingMaps[im]}`)
       .join(',')}
     }`
@@ -503,6 +513,7 @@ type IncomingReturn = Promise<Array<TypedActions> | TypedActions | false | undef
     : 'void'
   const customResponseIncomingMap = `\nexport type CustomResponseIncomingCallMap = {
     ${Object.keys(project.customResponseIncomingMaps)
+      .filter(im => enabledCall(im, 'custom'))
       .map(im => `  ${im}?: ${project.customResponseIncomingMaps[im]}`)
       .join(',')}
     }`
@@ -549,13 +560,13 @@ ${messageTypesData}
 function write(typeDefs, project) {
   // Need any for weird flow issue where it gets confused by multiple
   // incoming call map types
-  const callMapType = Object.keys(project.incomingMaps).length ? 'IncomingCallMapType' : 'void'
+  //const callMapType = Object.keys(project.incomingMaps).length ? 'IncomingCallMapType' : 'void'
 
   const typePrelude = `/* eslint-disable */
 
 // This file is auto-generated by client/protocol/Makefile.
 // Not enabled: calls need to be turned on in enabled-calls.json
-import {getEngine as engine} from '../../engine/require'
+import {getEngine as engine} from '@/engine/require'
 `
   const consts = Object.keys(typeDefs.consts).map(k => typeDefs.consts[k])
   const messagePromise = Object.keys(typeDefs.messages).map(k => typeDefs.messages[k].rpcPromise)

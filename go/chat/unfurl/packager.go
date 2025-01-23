@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/keybase/client/go/avatars"
@@ -57,9 +58,19 @@ func (p *Packager) assetFilename(url string) string {
 }
 
 func (p *Packager) assetBodyAndLength(ctx context.Context, url string) (body io.ReadCloser, size int64, err error) {
-	resp, err := libkb.ProxyHTTPGet(p.G().ExternalG(), p.G().Env, url, "UnfurlPackager")
+	client := libkb.ProxyHTTPClient(p.G().ExternalG(), p.G().Env, "UnfurlPackager")
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Add("User-Agent", libkb.UserAgent)
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return body, size, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, 0, fmt.Errorf("Status %s", resp.Status)
 	}
 	return resp.Body, resp.ContentLength, nil
 }
@@ -74,7 +85,7 @@ func (p *Packager) assetFromURL(ctx context.Context, url string, uid gregor1.UID
 }
 
 func (p *Packager) uploadAsset(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	src *attachments.BufReadResetter, filename string, len int64, md chat1.AssetMetadata, contentType string) (res chat1.Asset, err error) {
+	src *attachments.BufReadResetter, filename string, size int64, md chat1.AssetMetadata, contentType string) (res chat1.Asset, err error) {
 	atyp, err := md.AssetType()
 	if err != nil {
 		return res, err
@@ -83,7 +94,10 @@ func (p *Packager) uploadAsset(ctx context.Context, uid gregor1.UID, convID chat
 		return res, fmt.Errorf("invalid asset for unfurl package: %v mime: %s", atyp, contentType)
 	}
 
-	s3params, err := p.ri().GetS3Params(ctx, convID)
+	s3params, err := p.ri().GetS3Params(ctx, chat1.GetS3ParamsArg{
+		ConversationID: convID,
+		TempCreds:      true,
+	})
 	if err != nil {
 		return res, err
 	}
@@ -94,7 +108,7 @@ func (p *Packager) uploadAsset(ctx context.Context, uid gregor1.UID, convID chat
 	task := attachments.UploadTask{
 		S3Params:       s3params,
 		Filename:       filename,
-		FileSize:       len,
+		FileSize:       size,
 		Plaintext:      src,
 		S3Signer:       p.s3signer,
 		ConversationID: convID,
@@ -133,8 +147,14 @@ func (p *Packager) assetFromURLWithBody(ctx context.Context, body io.ReadCloser,
 	if err := src.Reset(); err != nil {
 		return res, err
 	}
-	uploadPt := src
+
+	filename = pre.Filename
 	uploadLen := len(dat)
+	if pre.SrcDat != nil {
+		src = attachments.NewBufReadResetter(pre.SrcDat)
+		uploadLen = len(pre.SrcDat)
+	}
+	uploadPt := src
 	uploadMd := pre.BaseMetadata()
 	uploadContentType := pre.ContentType
 	if usePreview && pre.Preview != nil {
@@ -150,22 +170,22 @@ func (p *Packager) assetFromURLWithBody(ctx context.Context, body io.ReadCloser,
 
 func (p *Packager) uploadVideo(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
 	video chat1.UnfurlVideo) (res chat1.Asset, err error) {
-	body, len, err := p.assetBodyAndLength(ctx, video.Url)
+	body, size, err := p.assetBodyAndLength(ctx, video.Url)
 	if err != nil {
 		return res, err
 	}
 	defer body.Close()
-	return p.uploadVideoWithBody(ctx, uid, convID, body, len, video)
+	return p.uploadVideoWithBody(ctx, uid, convID, body, size, video)
 }
 
 func (p *Packager) uploadVideoWithBody(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	body io.ReadCloser, len int64, video chat1.UnfurlVideo) (res chat1.Asset, err error) {
+	body io.ReadCloser, size int64, video chat1.UnfurlVideo) (res chat1.Asset, err error) {
 	dat, err := io.ReadAll(body)
 	if err != nil {
 		return res, err
 	}
 	return p.uploadAsset(ctx, uid, convID, attachments.NewBufReadResetter(dat), "video.mp4",
-		len, chat1.NewAssetMetadataWithVideo(chat1.AssetMetadataVideo{
+		size, chat1.NewAssetMetadataWithVideo(chat1.AssetMetadataVideo{
 			Width:      video.Width,
 			Height:     video.Height,
 			DurationMs: 1,

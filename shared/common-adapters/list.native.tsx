@@ -1,21 +1,18 @@
 import * as React from 'react'
 import {FlatList, View} from 'react-native'
-import * as Styles from '../styles'
+import * as Styles from '@/styles'
 import type {Props} from './list'
-import {createAnimatedComponent} from './reanimated'
+import ReAnimated from './reanimated'
 import noop from 'lodash/noop'
 
-const AnimatedFlatList = createAnimatedComponent(FlatList)
+const AnimatedFlatList = ReAnimated.FlatList
 
 class List<Item> extends React.PureComponent<Props<Item>> {
-  static defaultProps = {
-    keyboardShouldPersistTaps: 'handled',
-  }
   _itemRender = ({item, index}: {item: Item; index: number}) => {
     return this.props.renderItem(index, item)
   }
 
-  _getItemLayout = (_: Array<Item> | null | undefined, index: number) => ({
+  _getItemLayout = (_: unknown, index: number) => ({
     index,
     length: this.props.fixedHeight || 0,
     offset: (this.props.fixedHeight || 0) * index,
@@ -27,7 +24,8 @@ class List<Item> extends React.PureComponent<Props<Item>> {
     }
 
     const keyProp = this.props.keyProperty || 'key'
-    return item[keyProp] ?? String(index)
+    const i = item as {[key: string]: string}
+    return i[keyProp] ?? String(index)
   }
 
   render() {
@@ -54,7 +52,7 @@ class List<Item> extends React.PureComponent<Props<Item>> {
             data={this.props.items}
             getItemLayout={this.props.fixedHeight ? this._getItemLayout : undefined}
             keyExtractor={this._keyExtractor}
-            keyboardShouldPersistTaps={this.props.keyboardShouldPersistTaps}
+            keyboardShouldPersistTaps={this.props.keyboardShouldPersistTaps ?? 'handled'}
             ListHeaderComponent={this.props.ListHeaderComponent}
             onEndReached={this.props.onEndReached}
             onEndReachedThreshold={this.props.onEndReachedThreshold}

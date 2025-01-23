@@ -17,6 +17,7 @@
   @typedef("bytes")  record OutboxID {}
   @typedef("bytes")  record TopicNameState {}
   @typedef("bytes")  record FlipGameID {}
+  @typedef("string")  record ArchiveJobID {}
 
   record InboxVersInfo {
     gregor1.UID uid;
@@ -94,7 +95,8 @@
     PLAINTEXTMOBILE_1,
     PLAINTEXTDESKTOP_2,
     DEFAULTSOUNDMOBILE_3,
-    DISABLETYPING_4
+    DISABLETYPING_4,
+    CONVERTHEIC_5
   }
   record GlobalAppNotificationSettings {
     map<GlobalAppNotificationSetting, bool> settings;
@@ -597,7 +599,8 @@
     BOTCOMMANDS_10,
     EMOJISOURCE_11,
     FORWARDMSG_12,
-    LOCALIZE_13
+    LOCALIZE_13,
+    ARCHIVE_14
   }
 
   enum ReIndexingMode {

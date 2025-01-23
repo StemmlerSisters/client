@@ -1,12 +1,15 @@
 import * as React from 'react'
-import * as Styles from '../styles'
-import Box from './box'
+import * as Styles from '@/styles'
+import {Box2Measure} from './box'
 import Toast from './toast'
 import Text from './text'
 import type {Props} from './with-tooltip'
+import type {MeasureRef} from './measure-ref'
+
+const IGNORE_FOR_PROFILING = false as boolean
 
 const Kb = {
-  Box,
+  Box2Measure,
   Text,
   Toast,
 }
@@ -14,59 +17,56 @@ const Kb = {
 const WithTooltip = React.memo(function WithTooltip(p: Props) {
   const {containerStyle, className, multiline, backgroundColor, toastStyle} = p
   const {disabled, toastClassName, children, position, textStyle, tooltip} = p
-  const attachmentRef = React.useRef(null)
-  const [mouseIn, setMouseIn] = React.useState(false)
+  const popupAnchor = React.useRef<MeasureRef>(null)
   const [visible, setVisible] = React.useState(false)
 
   const onMouseEnter = React.useCallback(() => {
-    setMouseIn(true)
+    setVisible(true)
   }, [])
   const onMouseLeave = React.useCallback(() => {
-    setMouseIn(false)
+    setVisible(false)
   }, [])
 
-  React.useEffect(() => {
-    setVisible(mouseIn)
-  }, [mouseIn])
-
-  const setAttachmentRef = React.useCallback(ref => {
-    attachmentRef.current = ref
-  }, [])
-  const getAttachmentRef = React.useCallback(() => attachmentRef.current, [])
+  const toast = React.useMemo(() => {
+    return (
+      <Kb.Toast
+        containerStyle={Styles.collapseStyles([
+          styles.container,
+          multiline && styles.containerMultiline,
+          backgroundColor && {backgroundColor},
+          toastStyle,
+        ])}
+        visible={true}
+        attachTo={popupAnchor}
+        position={position || 'top center'}
+        className={toastClassName}
+      >
+        <Kb.Text
+          center={!Styles.isMobile}
+          type="BodySmall"
+          style={Styles.collapseStyles([styles.text, textStyle])}
+        >
+          {tooltip}
+        </Kb.Text>
+      </Kb.Toast>
+    )
+  }, [backgroundColor, multiline, position, textStyle, toastClassName, toastStyle, tooltip])
 
   return (
     <>
-      <Kb.Box
+      <Kb.Box2Measure
+        direction="vertical"
+        alignSelf="stretch"
+        alignItems="center"
         style={containerStyle}
-        forwardedRef={setAttachmentRef}
-        onMouseOver={onMouseEnter}
-        onMouseLeave={onMouseLeave}
+        ref={popupAnchor}
+        onMouseOver={IGNORE_FOR_PROFILING ? undefined : onMouseEnter}
+        onMouseLeave={IGNORE_FOR_PROFILING ? undefined : onMouseLeave}
         className={className}
       >
         {children}
-      </Kb.Box>
-      {!disabled && mouseIn && (
-        <Kb.Toast
-          containerStyle={Styles.collapseStyles([
-            styles.container,
-            multiline && styles.containerMultiline,
-            backgroundColor && {backgroundColor: backgroundColor},
-            toastStyle,
-          ])}
-          visible={!!tooltip && visible}
-          attachTo={getAttachmentRef}
-          position={position || 'top center'}
-          className={toastClassName}
-        >
-          <Kb.Text
-            center={!Styles.isMobile}
-            type="BodySmall"
-            style={Styles.collapseStyles([styles.text, textStyle])}
-          >
-            {tooltip}
-          </Kb.Text>
-        </Kb.Toast>
-      )}
+      </Kb.Box2Measure>
+      {!disabled && visible && tooltip ? toast : null}
     </>
   )
 })

@@ -1,24 +1,18 @@
+import * as C from '@/constants'
+import * as Kb from '@/common-adapters'
+import * as T from '@/constants/types'
 import * as React from 'react'
-import * as Kb from '../common-adapters'
 import DragHeader from '../desktop/remote/drag-header.desktop'
-import * as Styles from '../styles'
-import {_setDarkModePreference} from '../styles/dark-mode'
-import * as RPCTypes from '../constants/types/rpc-gen'
 
 export type Props = {
   darkMode: boolean
   onSubmit: (password: string) => void
   onCancel: () => void
-  showTyping?: RPCTypes.Feature
-  type: RPCTypes.PassphraseType
+  showTyping?: T.RPCGen.Feature
+  type: T.RPCGen.PassphraseType
   prompt: string
   retryLabel?: string
   submitLabel?: string
-}
-
-type DefaultProps = {
-  retryLabel: string
-  submitLabel: string
 }
 
 type State = {
@@ -27,7 +21,6 @@ type State = {
 }
 
 class Pinentry extends React.Component<Props, State> {
-  static defaultProps: DefaultProps
   state: State
 
   constructor(props: Props) {
@@ -37,6 +30,12 @@ class Pinentry extends React.Component<Props, State> {
       password: '',
       showTyping: this.props.showTyping?.defaultValue ?? false,
     }
+  }
+
+  componentDidMount() {
+    C.useDarkModeState
+      .getState()
+      .dispatch.setDarkModePreference(this.props.darkMode ? 'alwaysDark' : 'alwaysLight')
   }
 
   componentDidUpdate(prevProps: Props) {
@@ -55,8 +54,7 @@ class Pinentry extends React.Component<Props, State> {
   }
 
   render() {
-    _setDarkModePreference(this.props.darkMode ? 'alwaysDark' : 'alwaysLight')
-    const isPaperKey = this.props.type === RPCTypes.PassphraseType.paperKey
+    const isPaperKey = this.props.type === T.RPCGen.PassphraseType.paperKey
     return (
       <Kb.Box
         style={styles.container}
@@ -64,7 +62,7 @@ class Pinentry extends React.Component<Props, State> {
         key={this.props.darkMode ? 'darkMode' : 'light'}
       >
         <DragHeader icon={false} title="" onClose={this.props.onCancel} windowDragging={true} />
-        <Kb.Box style={{...Styles.globalStyles.flexBoxColumn, paddingLeft: 30, paddingRight: 30}}>
+        <Kb.Box style={{...Kb.Styles.globalStyles.flexBoxColumn, paddingLeft: 30, paddingRight: 30}}>
           <Kb.Text type="Body" center={true}>
             {this.props.prompt}
           </Kb.Text>
@@ -87,11 +85,11 @@ class Pinentry extends React.Component<Props, State> {
               type={this.state.showTyping ? 'passwordVisible' : 'password'}
               value={this.state.password}
             />
-            {!!this.props.retryLabel && (
+            {this.props.retryLabel ? (
               <Kb.Text style={styles.alignment} type="BodySmallError">
                 {this.props.retryLabel}
               </Kb.Text>
-            )}
+            ) : null}
             {this.props.showTyping && this.props.showTyping.allow && (
               <Kb.Checkbox
                 checked={this.state.showTyping}
@@ -103,7 +101,7 @@ class Pinentry extends React.Component<Props, State> {
           </Kb.Box2>
           <Kb.Button
             style={{alignSelf: 'center'}}
-            label={this.props.submitLabel}
+            label={this.props.submitLabel ?? 'Continue'}
             onClick={this._onSubmit}
             disabled={!this.state.password}
           />
@@ -113,17 +111,12 @@ class Pinentry extends React.Component<Props, State> {
   }
 }
 
-Pinentry.defaultProps = {
-  retryLabel: '',
-  submitLabel: 'Continue',
-}
-
-const styles = Styles.styleSheetCreate(() => ({
-  alignment: {marginLeft: Styles.globalMargins.xsmall},
+const styles = Kb.Styles.styleSheetCreate(() => ({
+  alignment: {marginLeft: Kb.Styles.globalMargins.xsmall},
   container: {
-    ...Styles.globalStyles.flexBoxColumn,
-    backgroundColor: Styles.globalColors.white,
-    paddingBottom: Styles.globalMargins.medium,
+    ...Kb.Styles.globalStyles.flexBoxColumn,
+    backgroundColor: Kb.Styles.globalColors.white,
+    paddingBottom: Kb.Styles.globalMargins.medium,
   },
   inputContainer: {maxWidth: 428},
 }))

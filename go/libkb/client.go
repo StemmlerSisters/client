@@ -189,7 +189,7 @@ func NewClient(g *GlobalContext, config *ClientConfig, needCookie bool) (*Client
 			// where DNS requests keep failing even though the network is up.
 			// This is similar to what the Rust standard library does:
 			// https://github.com/rust-lang/rust/blob/028569ab1b/src/libstd/sys_common/net.rs#L186-L190
-			resinit.ResInitIfDNSError(err)
+			resinit.IfDNSError(err)
 			return c, err
 		}
 		if err = rpc.DisableSigPipe(c); err != nil {
@@ -251,7 +251,7 @@ func ServerLookup(env *Env, mode RunMode) (string, error) {
 	if mode == ProductionRunMode {
 		if env.IsCertPinningEnabled() {
 			// In order to disable SSL pinning we switch to doing requests against keybase.io which has a TLS
-			// cert signed by a publicly trusted CA (compared to api-0.keybaseapi.com which has a non-trusted but
+			// cert signed by a publicly trusted CA (compared to api-1.keybaseapi.com which has a non-trusted but
 			// pinned certificate
 			return ProductionServerURI, nil
 		}

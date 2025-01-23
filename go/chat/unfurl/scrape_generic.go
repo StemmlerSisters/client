@@ -8,9 +8,9 @@ import (
 
 	"github.com/keybase/client/go/libkb"
 
+	"github.com/gocolly/colly/v2"
 	"github.com/keybase/client/go/chat/attachments"
 	"github.com/keybase/client/go/protocol/chat1"
-	"github.com/keybase/colly"
 )
 
 func fullURL(hostname, path string) string {
@@ -18,9 +18,8 @@ func fullURL(hostname, path string) string {
 		return path
 	} else if strings.HasPrefix(path, "//") {
 		return "http:" + path
-	} else {
-		return "http://" + hostname + path
 	}
+	return "http://" + hostname + path
 }
 
 func (s *Scraper) setAndParsePubTime(ctx context.Context, content string, generic *scoredGenericRaw, score int) {
@@ -137,7 +136,9 @@ func (s *Scraper) addGenericScraperToCollector(ctx context.Context, c *colly.Col
 
 	c.OnResponse(func(r *colly.Response) {
 		contentType := r.Headers.Get("content-type")
-		if contentType == "image/jpeg" || contentType == "image/png" || contentType == "image/gif" {
+		mediaType, _, _ := strings.Cut(contentType, ";")
+		mediaType = strings.TrimSpace(strings.ToLower(mediaType))
+		if mediaType == "image/jpeg" || mediaType == "image/png" || mediaType == "image/gif" {
 			generic.ImageUrl = &uri
 		}
 	})

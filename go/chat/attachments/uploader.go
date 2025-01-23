@@ -511,11 +511,12 @@ func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.Con
 		u.G().ActivityNotifier.AttachmentUploadProgress(ctx, uid, convID, outboxID, bytesComplete, bytesTotal)
 	}
 
-	// preprocess asset (get content type, create preview if possible)
+	// preprocess asset (get content type, create preview if possible, convert from heic to jpeg)
 	var pre Preprocess
 	var ures types.AttachmentUploadResult
 	ures.Metadata = metadata
 	pp := NewPendingPreviews(u.G())
+	fileSize := finfo.Size()
 	if pre, err = pp.Get(ctx, outboxID); err != nil {
 		u.Debug(ctx, "upload: no pending preview, generating one: %s", err)
 		if pre, err = PreprocessAsset(ctx, u.G(), u.DebugLabeler, src, filename, u.G().NativeVideoHelper,
@@ -532,12 +533,23 @@ func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.Con
 		}
 	}
 
+	filename = pre.Filename
+	// Use our converted input, if available
+	if pre.SrcDat != nil {
+		fileSize = int64(len(pre.SrcDat))
+		src.Close()
+		src = NewBufReadResetter(pre.SrcDat)
+	}
+
 	var s3params chat1.S3Params
 	paramsCh := make(chan struct{})
 	g.Go(func() (err error) {
 		u.Debug(bgctx, "upload: fetching s3 params")
 		u.G().ActivityNotifier.AttachmentUploadStart(bgctx, uid, convID, outboxID)
-		if s3params, err = u.ri().GetS3Params(bgctx, convID); err != nil {
+		if s3params, err = u.ri().GetS3Params(bgctx, chat1.GetS3ParamsArg{
+			ConversationID: convID,
+			TempCreds:      true,
+		}); err != nil {
 			return err
 		}
 		close(paramsCh)
@@ -567,7 +579,7 @@ func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.Con
 		task := UploadTask{
 			S3Params:       s3params,
 			Filename:       filename,
-			FileSize:       finfo.Size(),
+			FileSize:       fileSize,
 			Plaintext:      src,
 			S3Signer:       u.s3signer,
 			ConversationID: convID,

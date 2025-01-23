@@ -1,10 +1,10 @@
-import * as React from 'react'
+import type * as React from 'react'
 export type Props = {
   autoPlay: boolean
   height: number
-  style: Object
+  style: object
   onClick?: () => void
   url: string
   width: number
 }
-export declare class Video extends React.Component<Props> {}
+export declare const Video: (p: Props) => React.ReactNode

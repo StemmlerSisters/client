@@ -1,68 +1,95 @@
 import {rimrafSync} from 'rimraf'
 import fs from 'fs-extra'
-import klawSync from 'klaw-sync'
-import minimist from 'minimist'
 import os from 'os'
 import packager, {type Options} from 'electron-packager'
 import path from 'path'
 import webpack from 'webpack'
 import rootConfig from './webpack.config.babel'
+import {readdir} from 'node:fs/promises'
+import {electronChecksums} from './electron-sums'
 
 const TEMP_SKIP_BUILD: boolean = false
-
-const electronVersion = '22.1.0'
-
-// To get the hashes download the SHASUMS.txt file and run
-/*
- cat SHASUMS256.txt |
-  grep 'electron.*\(darwin-arm64\|darwin-x64\|linux-arm64\|linux-x64\|win32-x64\)\.zip\|hunspell_dictionaries' |
-  awk ' { t = $1; $1 = substr($2,2); $2 = ":"; $3 = t; print $1 $2 $3; } '
-*/
-
-// prettier-ignore
-const electronChecksums = {
-  [`electron-v${electronVersion}-darwin-arm64.zip`]:    '4ebf838308e93ad9956f3ce3a14b8d41607ffec5cd2054818d0c91b79df101a2',
-  [`electron-v${electronVersion}-darwin-x64.zip`]:      '969cad3fad6a03cbbc1658722cbf87547a8465c90dd4287fd5c03bd15bbf8a5b',
-  [`electron-v${electronVersion}-linux-arm64.zip`]:     '1d3e0011761f5ba05faf994a7f78cf518e49e0fef7e4528853e1bff9378d02cf',
-  [`electron-v${electronVersion}-linux-x64.zip`]:       '543e5fa7f2b602c3cd7e62a358441faf6f490e738de9b0bd796ad65d6bbd35ee',
-  [`electron-v${electronVersion}-win32-x64.zip`]:       'f0e54799cc8de8379fff32bf3d47b4ae52ad04ec681c74d143d689c4047e091f',
-  'hunspell_dictionaries.zip':                          '2c0309120e7bb8aa27baa1c1eaf866e2c9af905f8a52f2465b96fb1ba577096c',
-}
 
 // absolute path relative to this script
 const desktopPath = (...args: Array<string>) => path.join(__dirname, ...args)
 
+async function walk(dir: string, onlyExts: Array<string>): Promise<Array<string>> {
+  const dirents = await readdir(dir, {withFileTypes: true})
+  const files = await Promise.all(
+    dirents.map(async dirent => {
+      const res = path.resolve(dir, dirent.name)
+      return dirent.isDirectory() ? [res, ...(await walk(res, onlyExts))] : res
+    })
+  )
+
+  return files.flat().filter(i => {
+    const ext = path.extname(i)
+    return !ext || onlyExts.includes(ext)
+  })
+}
+
 // recursively copy a folder over and allow only files with the extensions passed as onlyExts
-const copySyncFolder = (src: string, target: string, onlyExts: Array<string>) => {
+const copySyncFolder = async (src: string, target: string, onlyExts: Array<string>) => {
   const srcRoot = desktopPath(src)
   const dstRoot = desktopPath(target)
-  const files: Array<{path: string}> = klawSync(srcRoot, {
-    filter: (item: {path: string}) => {
-      const ext = path.extname(item.path)
-      return !ext || onlyExts.includes(ext)
-    },
-  })
-  const relSrcs = files.map(f => f.path.substring(srcRoot.length))
+  const files = await walk(srcRoot, onlyExts)
+
+  const relSrcs = files.map(f => f.substring(srcRoot.length))
   const dsts = relSrcs.map(f => path.join(dstRoot, f))
 
-  relSrcs.forEach((s, idx) => fs.copySync(path.join(srcRoot, s), dsts[idx]))
+  relSrcs.forEach((s, idx) => fs.copySync(path.join(srcRoot, s), dsts[idx] ?? ''))
 }
 
 const copySync = (src: string, target: string, options?: object) => {
   fs.copySync(desktopPath(src), desktopPath(target), {...options, dereference: true})
 }
 
-const argv = minimist(process.argv.slice(2), {string: ['appVersion']}) as {[key: string]: string | undefined}
+const getArgs = () => {
+  const args = process.argv.slice(2)
+  const ret = {
+    appVersion: '',
+    arch: '',
+    comment: '',
+    icon: '',
+    outDir: '',
+    platform: '',
+    saltpackIcon: '',
+  }
+
+  args.forEach(a => {
+    const [l, r] = a.split('=')
+    if (r === undefined) {
+      // single param?
+    } else {
+      if (l?.startsWith('--')) {
+        const k = l.substring(2)
+
+        if (Object.hasOwn(ret, k)) {
+          ret[k as keyof typeof ret] = r
+        }
+      } else {
+        console.error('Weird argv key', a)
+      }
+    }
+  })
+  return ret
+}
+
+const argv = getArgs()
 
 const appName = 'Keybase'
 const shouldUseAsar = false
-const arch: string = typeof argv.arch === 'string' ? argv.arch.toString() : os.arch()
-const platform: string = typeof argv.platform === 'string' ? argv.platform.toString() : os.platform()
-const appVersion: string = (typeof argv.appVersion === 'string' && argv.appVersion) || '0.0.0'
-const comment: string = (typeof argv.comment === 'string' && argv.comment) || ''
-const outDir: string = (typeof argv.outDir === 'string' && argv.outDir) || ''
-const appCopyright = 'Copyright (c) 2022, Keybase'
+const arch = argv.arch || os.arch()
+const platform = argv.platform || os.platform()
+const appVersion = argv.appVersion || '0.0.0'
+const comment = argv.comment
+const outDir = argv.outDir
+const saltpackIcon = argv.saltpackIcon
+const appCopyright = 'Copyright (c) 2024, Keybase'
 const companyName = 'Keybase, Inc.'
+const electronVersion = (require('../package.json') as {devDependencies: {electron: string}}).devDependencies
+  .electron
+console.log('Found electron version:', electronVersion)
 
 const packagerOpts: Options = {
   appBundleId: 'keybase.Electron',
@@ -73,7 +100,7 @@ const packagerOpts: Options = {
   darwinDarkModeSupport: true,
   dir: desktopPath('./build'),
   download: {checksums: electronChecksums},
-  electronVersion: undefined,
+  electronVersion,
   // macOS file association to saltpack files
   extendInfo: {
     CFBundleDocumentTypes: [
@@ -100,17 +127,24 @@ const packagerOpts: Options = {
     ],
   },
   // Any paths placed here will be moved to the final bundle
-  extraResource: [] as Array<string>,
+  extraResource: saltpackIcon ? [saltpackIcon] : undefined,
   helperBundleId: 'keybase.ElectronHelper',
-  icon: undefined,
+  icon: argv.icon,
   ignore: [/\.map/, /\/test($|\/)/, /\/tools($|\/)/, /\/release($|\/)/, /\/node_modules($|\/)/],
   name: appName,
   protocols: [
     {
       name: 'Keybase',
-      schemes: ['keybase', 'web+stellar'],
+      schemes: ['keybase'],
     },
   ],
+  prune: true,
+}
+
+if (!packagerOpts.extraResource?.[0]) {
+  console.warn(
+    `Missing 'saltpack.icns' from yarn package arguments. Need an icon to associate ".saltpack" files with Electron on macOS, Windows, and Linux.`
+  )
 }
 
 async function main() {
@@ -125,7 +159,7 @@ async function main() {
 
   copySync('Icon.png', 'build/desktop/Icon.png')
   copySync('Icon@2x.png', 'build/desktop/Icon@2x.png')
-  copySyncFolder('../images', 'build/images', ['.gif', '.png'])
+  await copySyncFolder('../images', 'build/images', ['.gif', '.png'])
   if (TEMP_SKIP_BUILD) {
   } else {
     fs.removeSync(desktopPath('build/images/folders'))
@@ -140,31 +174,6 @@ async function main() {
     version: appVersion,
   })
 
-  const icon: string = argv.icon ?? ''
-  const saltpackIcon: string = argv.saltpackIcon ?? ''
-
-  if (icon) {
-    packagerOpts.icon = icon
-  }
-
-  if (saltpackIcon) {
-    packagerOpts.extraResource = [saltpackIcon]
-  } else {
-    console.warn(
-      `Missing 'saltpack.icns' from yarn package arguments. Need an icon to associate ".saltpack" files with Electron on macOS, Windows, and Linux.`
-    )
-  }
-
-  // use the same version as the currently-installed electron
-  console.log('Finding electron version')
-  try {
-    packagerOpts.electronVersion = require('../package.json').devDependencies.electron
-    console.log('Found electron version:', packagerOpts.electronVersion)
-  } catch (err) {
-    console.log("Couldn't parse yarn list to find electron:", err)
-    process.exit(1)
-  }
-
   try {
     await startPack()
   } catch (err) {
@@ -175,7 +184,7 @@ async function main() {
 
 async function startPack() {
   console.log('Starting webpack build\nInjecting __VERSION__: ', appVersion)
-  process.env.APP_VERSION = appVersion
+  process.env['APP_VERSION'] = appVersion
   const webpackConfig = rootConfig(null, {mode: 'production'})
   try {
     if (TEMP_SKIP_BUILD) {
@@ -196,18 +205,18 @@ async function startPack() {
       }
     }
 
-    copySyncFolder('./dist', 'build/desktop/sourcemaps', ['.map'])
-    copySyncFolder('./dist', 'build/desktop/dist', ['.js', '.ttf', '.png', '.html'])
+    await copySyncFolder('./dist', 'build/desktop/sourcemaps', ['.map'])
+    await copySyncFolder('./dist', 'build/desktop/dist', ['.js', '.ttf', '.png', '.html'])
     fs.removeSync(desktopPath('build/desktop/dist/fonts'))
 
     rimrafSync(desktopPath('release'))
 
-    let aps = [[platform, arch]]
+    const aps = [[platform, arch]]
     await Promise.all(
       aps.map(async ([plat, arch]) => {
         try {
-          const appPaths = await pack(plat, arch)
-          postPack(appPaths, plat, arch)
+          const appPaths = await pack(plat!, arch!)
+          postPack(appPaths, plat!, arch!)
         } catch (err) {
           console.error(err)
           process.exit(1)
@@ -228,37 +237,36 @@ async function pack(plat: string, arch: string) {
   if (packageOutDir === '') packageOutDir = desktopPath(`release/${plat}-${arch}`)
   console.log('Packaging to', packageOutDir)
 
-  let opts = {
+  const opts = {
     ...packagerOpts,
     arch,
     out: packageOutDir,
     platform: plat,
-    prune: true,
+    ...(plat === 'win32'
+      ? {
+          'version-string': {
+            CompanyName: companyName,
+            FileDescription: appName,
+            OriginalFilename: appName + '.exe',
+            ProductName: appName,
+          },
+        }
+      : null),
   }
+  console.log('Building using options', opts)
 
-  if (plat === 'win32') {
-    opts = {
-      ...opts,
-      // @ts-ignore does exist on win32
-      'version-string': {
-        CompanyName: companyName,
-        FileDescription: appName,
-        OriginalFilename: appName + '.exe',
-        ProductName: appName,
-      },
-    }
-  }
-
-  return packager(opts)
+  const ret = await packager(opts)
+  // sometimes returns bools, unclear why
+  return ret.filter(o => typeof o === 'string')
 }
 
-function postPack(appPaths: Array<string> | null, plat: string, arch: string) {
-  if (!appPaths || appPaths.length === 0) {
+function postPack(appPaths: Array<string>, plat: string, arch: string) {
+  if (appPaths.length === 0) {
     console.log(`${plat}-${arch} finished with no app bundles`)
     return
   }
   const subdir = plat === 'darwin' ? 'Keybase.app/Contents/Resources' : 'resources'
-  const dir = path.join(appPaths[0], subdir, 'app/desktop/dist')
+  const dir = path.join(appPaths[0]!, subdir, 'app/desktop/dist')
   const modules = ['node', 'main', 'tracker2', 'menubar', 'unlock-folders', 'pinentry']
   const files = [
     ...modules.map(p => p + '.bundle.js'),

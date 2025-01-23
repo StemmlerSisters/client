@@ -1,105 +1,101 @@
 // This loads up a remote component. It makes a pass-through store which accepts its props from the main window through ipc
 // Also protects it with an error boundary
 import * as React from 'react'
-import * as Styles from '../../styles'
 import * as ReactDOM from 'react-dom/client'
+import * as Kb from '@/common-adapters'
 import RemoteStore from './store.desktop'
 import Root from '../renderer/container.desktop'
-import {disableDragDrop} from '../../util/drag-drop.desktop'
-import ErrorBoundary from '../../common-adapters/error-boundary'
-import {initDesktopStyles} from '../../styles/index.desktop'
-import {enableMapSet} from 'immer'
-import KB2 from '../../util/electron.desktop'
+import {disableDragDrop} from '@/util/drag-drop.desktop'
+import ErrorBoundary from '@/common-adapters/error-boundary'
+import {initDesktopStyles} from '@/styles/index.desktop'
+import KB2 from '@/util/electron.desktop'
+import {setServiceDecoration} from '@/common-adapters/markdown/react'
+import ServiceDecoration from '@/common-adapters/markdown/service-decoration'
+
+setServiceDecoration(ServiceDecoration)
 
 const {closeWindow, showInactive} = KB2.functions
 
-enableMapSet()
 disableDragDrop()
-
 module.hot?.accept()
 
 type RemoteComponents = 'unlock-folders' | 'menubar' | 'pinentry' | 'tracker2'
 
-type Props = {
-  children: React.ReactNode
-  deserialize: (arg0: any, arg1: any) => any
+type Props<DeserializeProps, SerializeProps> = {
+  child: (p: DeserializeProps) => React.ReactNode
+  deserialize: (state?: DeserializeProps, props?: Partial<SerializeProps>) => DeserializeProps
   name: RemoteComponents
   params: string
   showOnProps: boolean
-  style: Styles.StylesDesktop | null
+  style?: Kb.Styles.StylesCrossPlatform
 }
 
-class RemoteComponentLoader extends React.Component<Props> {
-  _store: any
-
-  constructor(props: Props) {
-    super(props)
-    const remoteStore = new RemoteStore({
-      deserialize: props.deserialize,
-      gotPropsCallback: this._onGotProps,
-      windowComponent: props.name,
-      windowParam: props.params,
+function RemoteComponentLoader<DeserializeProps, SerializeProps>(p: Props<DeserializeProps, SerializeProps>) {
+  const storeRef = React.useRef<undefined | RemoteStore<DeserializeProps, SerializeProps>>()
+  if (!storeRef.current) {
+    storeRef.current = new RemoteStore<DeserializeProps, SerializeProps>({
+      deserialize: p.deserialize,
+      gotPropsCallback: () => {
+        if (p.showOnProps) {
+          showInactive?.()
+        }
+      },
+      onUpdated: v => {
+        setValue(v)
+      },
+      windowComponent: p.name,
+      windowParam: p.params,
     })
-    this._store = remoteStore.getStore()
   }
 
-  _onGotProps = () => {
-    // Show when we get props, unless its the menubar
-    if (this.props.showOnProps) {
-      showInactive?.()
-    }
-  }
+  const [value, setValue] = React.useState(storeRef.current._value)
 
-  render() {
-    return (
-      <div id="RemoteComponentRoot" style={this.props.style || (styles.container as any)}>
-        <ErrorBoundary closeOnClick={closeWindow} fallbackStyle={styles.errorFallback}>
-          <Root store={this._store}>{this.props.children}</Root>
-        </ErrorBoundary>
-      </div>
-    )
-  }
+  return (
+    <div id="RemoteComponentRoot" style={Kb.Styles.collapseStylesDesktop([p.style ?? styles.container])}>
+      <ErrorBoundary closeOnClick={closeWindow} fallbackStyle={styles.errorFallback}>
+        <Root>{p.child(value)}</Root>
+      </ErrorBoundary>
+    </div>
+  )
 }
 
-const styles = Styles.styleSheetCreate(() => ({
-  container: Styles.platformStyles({
-    isElectron: {
-      backgroundColor: Styles.globalColors.white,
-      display: 'block' as const,
-      height: '100%',
-      overflow: 'hidden',
-      width: '100%',
-    },
-  }),
-  errorFallback: {
-    backgroundColor: Styles.globalColors.white,
-  },
-  loading: {
-    backgroundColor: Styles.globalColors.greyDark,
-  },
-}))
+const styles = Kb.Styles.styleSheetCreate(
+  () =>
+    ({
+      container: Kb.Styles.platformStyles({
+        isElectron: {
+          backgroundColor: Kb.Styles.globalColors.white,
+          display: 'block' as const,
+          height: '100%',
+          overflow: 'hidden',
+          width: '100%',
+        },
+      }),
+      errorFallback: {backgroundColor: Kb.Styles.globalColors.white},
+      loading: {backgroundColor: Kb.Styles.globalColors.greyDark},
+    }) as const
+)
 
-export default function (options: {
-  child: React.ReactNode
-  deserialize: (arg0: any, arg1: any) => any
+export default function Loader<DeserializeProps, SerializeProps>(options: {
+  child: (p: DeserializeProps) => React.ReactNode
+  deserialize: (state?: DeserializeProps, props?: Partial<SerializeProps>) => DeserializeProps
   name: RemoteComponents
   params?: string
-  style?: Styles.StylesDesktop
+  style?: Kb.Styles.StylesCrossPlatform
   showOnProps?: boolean
 }) {
   initDesktopStyles()
   const node = document.getElementById('root')
   if (node) {
     ReactDOM.createRoot(node).render(
-      <RemoteComponentLoader
+      <RemoteComponentLoader<DeserializeProps, SerializeProps>
         name={options.name}
         params={options.params || ''}
-        style={options.style || null}
+        style={options.style}
         showOnProps={options.showOnProps ?? true}
         deserialize={options.deserialize}
-      >
-        {options.child}
-      </RemoteComponentLoader>
+        child={options.child}
+      />
     )
   }
 }

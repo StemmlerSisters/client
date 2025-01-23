@@ -1,6 +1,7 @@
 import * as React from 'react'
-import Box from '../box'
-import {Keyboard, StyleSheet} from 'react-native'
+import Box from '@/common-adapters/box'
+import * as Styles from '@/styles'
+import {Keyboard} from 'react-native'
 import {Portal} from '../portal.native'
 import type {Props} from '.'
 
@@ -11,16 +12,20 @@ const Kb = {
 
 const FloatingBox = (p: Props) => {
   const {hideKeyboard, children, containerStyle} = p
-
-  React.useEffect(() => {
+  const [lastHK, setLastHK] = React.useState(hideKeyboard)
+  if (lastHK !== hideKeyboard) {
+    setLastHK(hideKeyboard)
     if (hideKeyboard) {
       Keyboard.dismiss()
     }
-  }, [hideKeyboard])
+  }
 
   return (
     <Kb.Portal hostName="popup-root">
-      <Kb.Box pointerEvents="box-none" style={[StyleSheet.absoluteFill, containerStyle]}>
+      <Kb.Box
+        pointerEvents="box-none"
+        style={Styles.collapseStyles([Styles.globalStyles.fillAbsolute, containerStyle])}
+      >
         {children}
       </Kb.Box>
     </Kb.Portal>

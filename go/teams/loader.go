@@ -301,7 +301,7 @@ func (l *TeamLoader) load1(ctx context.Context, me keybase1.UserVersion, lArg ke
 			mctx.Debug("TeamLoader looking up team by name failed: %v -> %v", *teamName, err)
 			if code, ok := libkb.GetAppStatusCode(err); ok && code == keybase1.StatusCode_SCTeamNotFound {
 				mctx.Debug("replacing error: %v", err)
-				return nil, nil, NewTeamDoesNotExistError(lArg.Public, teamName.String())
+				return nil, nil, NewTeamDoesNotExistError(lArg.Public, "%s", teamName.String())
 			}
 			return nil, nil, err
 		}
@@ -355,7 +355,7 @@ func (l *TeamLoader) load1(ctx context.Context, me keybase1.UserVersion, lArg ke
 		// but it's better to have this understandable error message that's accurate
 		// most of the time than one with an ID that's always accurate.
 		mctx.Debug("replacing error: %v", err)
-		return nil, nil, NewTeamDoesNotExistError(lArg.Public, teamName.String())
+		return nil, nil, NewTeamDoesNotExistError(lArg.Public, "%s", teamName.String())
 	case nil:
 	default:
 		return nil, nil, err
@@ -542,26 +542,18 @@ func (l *TeamLoader) load2InnerLocked(ctx context.Context, arg load2ArgT) (res *
 }
 
 func (l *TeamLoader) checkHiddenResponse(mctx libkb.MetaContext, hiddenPackage *hidden.LoaderPackage, hiddenResp *libkb.MerkleHiddenResponse) (hiddenIsFresh bool, err error) {
-	if hiddenResp.CommittedHiddenTail != nil {
-		mctx.Debug("hiddenResp: %+v UncommittedSeqno %+v CommittedSeqno %v", hiddenResp, hiddenResp.UncommittedSeqno, hiddenResp.CommittedHiddenTail.Seqno)
-	} else {
-		mctx.Debug("hiddenResp: %+v UncommittedSeqno %+v", hiddenResp, hiddenResp.UncommittedSeqno)
-	}
+	mctx.Debug("hiddenResp: %+v UncommittedSeqno %+v", hiddenResp, hiddenResp.UncommittedSeqno)
 
 	switch hiddenResp.RespType {
 	case libkb.MerkleHiddenResponseTypeNONE:
-		hiddenIsFresh = true
 		mctx.Debug("Skipping CheckHiddenMerklePathResponseAndAddRatchets as no hidden data was received. If the server had to show us the hidden chain and didn't, we will error out later (once we can establish our role in the team).")
+		return true, nil
 	case libkb.MerkleHiddenResponseTypeFLAGOFF:
-		hiddenIsFresh = true
 		mctx.Debug("Skipping CheckHiddenMerklePathResponseAndAddRatchets as the hidden flag is off.")
+		return true, nil
 	default:
-		hiddenIsFresh, err = hiddenPackage.CheckHiddenMerklePathResponseAndAddRatchets(mctx, hiddenResp)
-		if err != nil {
-			return false, err
-		}
+		return hiddenPackage.CheckHiddenMerklePathResponseAndAddRatchets(mctx, hiddenResp)
 	}
-	return hiddenIsFresh, nil
 }
 
 func (l *TeamLoader) load2InnerLockedRetry(ctx context.Context, arg load2ArgT) (*load2ResT, error) {
@@ -967,9 +959,9 @@ func (l *TeamLoader) load2InnerLockedRetry(ctx context.Context, arg load2ArgT) (
 		return nil, fmt.Errorf("error recalculating name for %v: %v", ret.Name, err)
 	}
 	if !ret.Name.Eq(newName) {
-		// This deep copy is an absurd price to pay, but these mid-team renames should be quite rare.
-		copy := ret.DeepCopy()
-		ret = &copy
+		// This deep cp is an absurd price to pay, but these mid-team renames should be quite rare.
+		cp := ret.DeepCopy()
+		ret = &cp
 		ret.Name = newName
 	}
 
