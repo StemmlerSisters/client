@@ -1,4 +1,4 @@
-FROM alpine:3.21
+FROM alpine:3.22.1
 LABEL maintainer="Keybase <admin@keybase.io>"
 
 RUN apk add --update --no-cache gnupg procps ca-certificates bash
